@@ -1,0 +1,3 @@
+[submodule "cc-webgraph"]
+	path = cc-webgraph
+	url = https://github.com/commoncrawl/cc-webgraph.git
