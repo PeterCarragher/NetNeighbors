@@ -118,10 +118,10 @@ fi
 echo ""
 echo "3. Installing Python dependencies..."
 if command -v pip &> /dev/null; then
-    pip install -q psutil tqdm pandas ipywidgets 2>/dev/null || pip install --user -q psutil tqdm pandas ipywidgets
+    pip install -q psutil tqdm pandas ipywidgets py4j 2>/dev/null || pip install --user -q psutil tqdm pandas ipywidgets py4j
     echo "   ✅ Python dependencies installed"
 elif command -v pip3 &> /dev/null; then
-    pip3 install -q psutil tqdm pandas ipywidgets 2>/dev/null || pip3 install --user -q psutil tqdm pandas ipywidgets
+    pip3 install -q psutil tqdm pandas ipywidgets py4j 2>/dev/null || pip3 install --user -q psutil tqdm pandas ipywidgets py4j
     echo "   ✅ Python dependencies installed"
 else
     echo "   ⚠️  pip not found, skipping Python dependencies"
