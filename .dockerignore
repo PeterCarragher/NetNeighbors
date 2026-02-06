@@ -1,0 +1,39 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Notebooks
+*.ipynb
+.ipynb_checkpoints/
+
+# Build artifacts
+bin/
+*.class
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Data (mounted at runtime)
+webgraph/
+*.graph
+*.properties
+*.offsets
+*.gz

@@ -1,0 +1,15 @@
+# NetNeighbors Gradio App Dependencies
+
+# Web UI
+gradio>=4.0.0
+
+# Java bridge
+py4j>=0.10.9
+
+# Data processing
+pandas>=2.0.0
+
+# Utilities (optional, for notebook usage)
+tqdm>=4.0.0
+psutil>=5.0.0
+ipywidgets>=8.0.0

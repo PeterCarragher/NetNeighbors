@@ -126,6 +126,25 @@ class GraphBridge:
         if self.graph is None:
             raise RuntimeError("Graph not loaded. Call load_graph() first.")
 
+    def _java_int_array_to_list(self, java_array) -> List[int]:
+        """
+        Convert Java int[] to Python list with a single IPC call.
+
+        Instead of N separate array[i] accesses (N IPC calls),
+        this converts to string in Java and parses in Python (1 IPC call).
+        """
+        s = str(self.gateway.jvm.java.util.Arrays.toString(java_array))
+        if s == "[]":
+            return []
+        return [int(x) for x in s[1:-1].split(", ")]
+
+    def _java_long_array_to_list(self, java_array) -> List[int]:
+        """Convert Java long[] to Python list with a single IPC call."""
+        s = str(self.gateway.jvm.java.util.Arrays.toString(java_array))
+        if s == "[]":
+            return []
+        return [int(x) for x in s[1:-1].split(", ")]
+
     def domain_to_id(self, domain: str) -> Optional[int]:
         """Convert a domain name to its graph ID."""
         self._ensure_loaded()
@@ -237,10 +256,11 @@ class GraphBridge:
         # sharedPredecessors(vertices, minShared, maxShared)
         result_ids = self.graph.sharedPredecessors(java_ids, min_shared, len(ids))
 
-        # Convert long[] result to list of domains
+        # Bulk transfer result array and convert to domains
+        id_list = self._java_long_array_to_list(result_ids)
         results = []
-        for i in range(len(result_ids)):
-            label = self.graph.vertexIdToLabel(int(result_ids[i]))
+        for id in id_list:
+            label = self.graph.vertexIdToLabel(id)
             if label is not None:
                 results.append(label)
         return results
@@ -271,10 +291,11 @@ class GraphBridge:
         # sharedSuccessors(vertices, minShared, maxShared)
         result_ids = self.graph.sharedSuccessors(java_ids, min_shared, len(ids))
 
-        # Convert long[] result to list of domains
+        # Bulk transfer result array and convert to domains
+        id_list = self._java_long_array_to_list(result_ids)
         results = []
-        for i in range(len(result_ids)):
-            label = self.graph.vertexIdToLabel(int(result_ids[i]))
+        for id in id_list:
+            label = self.graph.vertexIdToLabel(id)
             if label is not None:
                 results.append(label)
         return results
@@ -320,18 +341,21 @@ class GraphBridge:
         seed_id_set = set(seed_ids)
 
         # Count connections for each neighbor
+        # Uses bulk array transfer to minimize IPC calls
         neighbor_counts = {}
 
         for i, seed_id in enumerate(seed_ids):
             # Get neighbors based on direction (returns int[] in Java)
             if direction == "backlinks":
-                neighbors = self.graph.predecessors(seed_id)
+                java_neighbors = self.graph.predecessors(seed_id)
             else:
-                neighbors = self.graph.successors(seed_id)
+                java_neighbors = self.graph.successors(seed_id)
 
-            # Iterate over Java int array
-            for j in range(len(neighbors)):
-                neighbor_id = int(neighbors[j])
+            # Bulk transfer: convert entire array to Python list in 1 IPC call
+            # instead of N separate array[j] accesses
+            neighbors = self._java_int_array_to_list(java_neighbors)
+
+            for neighbor_id in neighbors:
                 if neighbor_id not in seed_id_set:
                     neighbor_counts[neighbor_id] = neighbor_counts.get(neighbor_id, 0) + 1
 
@@ -355,6 +379,54 @@ class GraphBridge:
 
         # Sort by connections descending
         results.sort(key=lambda x: x["connections"], reverse=True)
+
+        print(f"Found {len(results):,} domains with >= {min_connections} connections")
+        return results
+
+    def discover_fast(
+        self,
+        seed_domains: List[str],
+        min_connections: int = 1,
+        direction: str = "backlinks"
+    ) -> List[str]:
+        """
+        Fast discovery using Java-side filtering (sharedPredecessors/sharedSuccessors).
+
+        This is much faster than discover() because all filtering happens in Java.
+        However, it only returns domain names without connection counts.
+
+        Args:
+            seed_domains: List of seed domain names
+            min_connections: Minimum number of seed connections required
+            direction: "backlinks" or "outlinks"
+
+        Returns:
+            List of domain names (no counts)
+        """
+        self._ensure_loaded()
+
+        # Validate seeds and convert to IDs
+        valid_seeds = []
+        for domain in seed_domains:
+            domain_clean = domain.strip().lower()
+            id = self.graph.vertexLabelToId(domain_clean)
+            if id >= 0:
+                valid_seeds.append(domain_clean)
+
+        if not valid_seeds:
+            print("No valid seed domains found in graph")
+            return []
+
+        print(f"Processing {len(valid_seeds)} seed domains with Java-side filtering...")
+
+        if direction == "backlinks":
+            results = self.shared_predecessors(valid_seeds, min_shared=min_connections)
+        else:
+            results = self.shared_successors(valid_seeds, min_shared=min_connections)
+
+        # Filter out seeds from results
+        seed_set = set(valid_seeds)
+        results = [d for d in results if d not in seed_set]
 
         print(f"Found {len(results):,} domains with >= {min_connections} connections")
         return results
