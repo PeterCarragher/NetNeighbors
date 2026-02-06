@@ -1,5 +1,5 @@
 # 🔍 News Source Discovery Using CommonCrawl Webgraph
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/PeterCarragher/NetNeighbors/blob/master/discovery_notebook.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/PeterCarragher/NetNeighborsColab/blob/master/discovery_notebook.ipynb)
 
 Discover related domains using link topology analysis from the CommonCrawl web graph.
 
