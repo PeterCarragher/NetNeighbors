@@ -52,16 +52,19 @@ class WebgraphDiscovery:
         self.graph_base = os.path.join(webgraph_dir, f"{version}-domain")
         self.vertices_file = os.path.join(webgraph_dir, f"{version}-domain-vertices.txt.gz")
 
-        # Cache for domain validation
-        self._domain_set = None
+    def validate_seeds(self, seed_domains: List[str]) -> Tuple[List[str], List[str]]:
+        """
+        Validate which seed domains exist in webgraph.
 
-    def _load_domain_set(self) -> set:
-        """Load set of all domains in webgraph (for validation)"""
-        if self._domain_set is not None:
-            return self._domain_set
+        Memory-efficient: Only scans for the specific seed domains,
+        doesn't load all 100M+ domains into memory.
+        """
+        # Normalize seed domains
+        seed_set = {d.strip().lower() for d in seed_domains}
+        found = set()
 
-        print("Loading domain list (one-time, ~30 seconds)...")
-        domains = set()
+        print(f"Validating {len(seed_set)} seed domains...")
+
         with gzip.open(self.vertices_file, 'rt', encoding='utf-8') as f:
             for line in f:
                 parts = line.strip().split('\t')
@@ -69,27 +72,16 @@ class WebgraphDiscovery:
                     reversed_domain = parts[1]
                     # Convert back to normal notation
                     domain = '.'.join(reversed(reversed_domain.split('.')))
-                    domains.add(domain)
 
-        self._domain_set = domains
-        print(f"✅ Loaded {len(domains):,} domains")
-        return domains
+                    if domain in seed_set:
+                        found.add(domain)
+                        if len(found) == len(seed_set):
+                            break  # Found all seeds, stop scanning
 
-    def validate_seeds(self, seed_domains: List[str]) -> Tuple[List[str], List[str]]:
-        """Validate which seed domains exist in webgraph"""
-        domain_set = self._load_domain_set()
+        not_found = list(seed_set - found)
+        print(f"✅ Found {len(found)}/{len(seed_set)} domains in webgraph")
 
-        found = []
-        not_found = []
-
-        for domain in seed_domains:
-            domain_clean = domain.strip().lower()
-            if domain_clean in domain_set:
-                found.append(domain_clean)
-            else:
-                not_found.append(domain_clean)
-
-        return found, not_found
+        return list(found), not_found
 
     def discover(self,
                  seed_domains: List[str],

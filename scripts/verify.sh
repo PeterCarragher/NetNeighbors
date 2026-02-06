@@ -2,14 +2,10 @@
 # Verification script for NetNeighbors installation
 # Checks all required components are present
 
-# Auto-detect base directory (Colab uses /content, otherwise use script's parent dir)
-if [ -d "/content" ]; then
-    BASE_DIR="/content"
-else
-    # Get the directory containing this script, then go up to find base
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    BASE_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
-fi
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BASE_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BASE_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 WEBGRAPH_DIR="${1:-$BASE_DIR/webgraph}"
 VERSION="${2:-cc-main-2025-26-nov-dec-jan}"
@@ -60,6 +56,14 @@ fi
 # Check webgraph data files
 echo ""
 echo "4. Webgraph Data Files:"
+
+
+# Auto-detect base directory (Colab uses /content, otherwise use script's parent dir)
+if [ -d "/content" ]; then
+  WEBGRAPH_DIR="/content/webgraph"
+fi
+
+echo "Webgraphs stored in: ${WEBGRAPH_DIR}"
 
 check_file() {
     local filename=$1

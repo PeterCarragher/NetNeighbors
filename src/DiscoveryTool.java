@@ -10,6 +10,9 @@ import java.util.zip.*;
  * Given a list of seed domains, discovers other domains that are connected
  * via backlinks or outlinks in the webgraph.
  *
+ * Memory-optimized: Only loads domain mappings for seeds and results,
+ * not the entire 100M+ domain list.
+ *
  * Usage:
  *   java -cp "cc-webgraph.jar:." DiscoveryTool \
  *       --graph /path/to/graph-base \
@@ -92,32 +95,36 @@ public class DiscoveryTool {
                          String outputFile, int minConnections, String direction) throws Exception {
 
         // Determine which graph to load based on direction
-        // For backlinks: use transpose graph (-t) where successors = predecessors
-        // For outlinks: use regular graph where successors = outlinks
         String graphPath = direction.equals("backlinks") ? graphBase + "-t" : graphBase;
 
         System.out.println("=".repeat(60));
-        System.out.println("Domain Discovery Tool");
+        System.out.println("Domain Discovery Tool (Memory-Optimized)");
         System.out.println("=".repeat(60));
         System.out.println("Direction: " + direction);
         System.out.println("Min connections: " + minConnections);
         System.out.println("Graph: " + graphPath);
         System.out.println();
 
-        // Load the graph
-        System.out.println("Loading graph...");
-        long startTime = System.currentTimeMillis();
-        BVGraph graph = BVGraph.load(graphPath);
-        long loadTime = System.currentTimeMillis() - startTime;
-        System.out.println("Graph loaded: " + String.format("%,d", graph.numNodes()) + " nodes");
-        System.out.println("Load time: " + (loadTime / 1000.0) + " seconds");
-        System.out.println();
+        // Load seed domains into a Set for fast lookup
+        System.out.println("Loading seed domains...");
+        Set<String> seedDomains = new HashSet<>();
+        try (BufferedReader br = new BufferedReader(new FileReader(seedsFile))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                String domain = line.trim().toLowerCase();
+                if (!domain.isEmpty()) {
+                    seedDomains.add(domain);
+                }
+            }
+        }
+        System.out.println("Loaded " + seedDomains.size() + " seed domains");
 
-        // Build domain <-> ID mappings
-        System.out.println("Loading domain mappings...");
-        startTime = System.currentTimeMillis();
-        Map<String, Integer> domainToId = new HashMap<>();
-        Map<Integer, String> idToDomain = new HashMap<>();
+        // PASS 1: Find IDs for seed domains only (memory efficient)
+        System.out.println("\nMapping seed domains to graph IDs...");
+        long startTime = System.currentTimeMillis();
+        Int2ObjectOpenHashMap<String> seedIdToDomain = new Int2ObjectOpenHashMap<>();
+        IntOpenHashSet seedIds = new IntOpenHashSet();
+        int foundCount = 0;
 
         try (BufferedReader br = new BufferedReader(
                 new InputStreamReader(
@@ -129,77 +136,50 @@ public class DiscoveryTool {
                 if (parts.length >= 2) {
                     int id = Integer.parseInt(parts[0]);
                     String revDomain = parts[1];
-
-                    // Convert reversed domain (com.example) to normal (example.com)
                     String domain = reverseDomain(revDomain);
 
-                    domainToId.put(domain, id);
-                    idToDomain.put(id, domain);
-                }
-            }
-        }
-        loadTime = System.currentTimeMillis() - startTime;
-        System.out.println("Loaded " + String.format("%,d", domainToId.size()) + " domain mappings");
-        System.out.println("Load time: " + (loadTime / 1000.0) + " seconds");
-        System.out.println();
-
-        // Load seed domains
-        System.out.println("Loading seed domains...");
-        Set<Integer> seedIds = new HashSet<>();
-        List<String> notFound = new ArrayList<>();
-
-        try (BufferedReader br = new BufferedReader(new FileReader(seedsFile))) {
-            String line;
-            while ((line = br.readLine()) != null) {
-                String domain = line.trim().toLowerCase();
-                if (domain.isEmpty()) continue;
-
-                Integer id = domainToId.get(domain);
-                if (id != null) {
-                    seedIds.add(id);
-                } else {
-                    notFound.add(domain);
+                    if (seedDomains.contains(domain)) {
+                        seedIds.add(id);
+                        seedIdToDomain.put(id, domain);
+                        foundCount++;
+                        if (foundCount == seedDomains.size()) {
+                            break; // Found all seeds, stop scanning
+                        }
+                    }
                 }
             }
         }
 
-        System.out.println("Found " + seedIds.size() + " seed domains in graph");
-        if (!notFound.isEmpty()) {
-            System.out.println("Warning: " + notFound.size() + " domains not found in graph");
-            if (notFound.size() <= 5) {
-                for (String d : notFound) {
-                    System.out.println("  - " + d);
-                }
-            } else {
-                for (int i = 0; i < 5; i++) {
-                    System.out.println("  - " + notFound.get(i));
-                }
-                System.out.println("  ... and " + (notFound.size() - 5) + " more");
-            }
-        }
-        System.out.println();
+        long scanTime = System.currentTimeMillis() - startTime;
+        System.out.println("Found " + seedIds.size() + "/" + seedDomains.size() + " seeds in graph");
+        System.out.println("Scan time: " + (scanTime / 1000.0) + " seconds");
 
         if (seedIds.isEmpty()) {
             System.err.println("Error: No valid seed domains found in graph!");
             System.exit(1);
         }
 
-        // Run discovery
-        System.out.println("Running discovery (" + direction + ")...");
+        // Load the graph
+        System.out.println("\nLoading graph...");
         startTime = System.currentTimeMillis();
-        Map<Integer, Integer> candidateCounts = new HashMap<>();
+        BVGraph graph = BVGraph.load(graphPath);
+        long loadTime = System.currentTimeMillis() - startTime;
+        System.out.println("Graph loaded: " + String.format("%,d", graph.numNodes()) + " nodes");
+        System.out.println("Load time: " + (loadTime / 1000.0) + " seconds");
+
+        // Run discovery
+        System.out.println("\nRunning discovery (" + direction + ")...");
+        startTime = System.currentTimeMillis();
+        Int2IntOpenHashMap candidateCounts = new Int2IntOpenHashMap();
+        candidateCounts.defaultReturnValue(0);
 
         int processed = 0;
-        for (Integer seedId : seedIds) {
-            // Get neighbors using successors()
-            // In transpose graph: successors = who links TO this node (backlinks)
-            // In regular graph: successors = who this node links TO (outlinks)
+        for (int seedId : seedIds) {
             LazyIntIterator neighbors = graph.successors(seedId);
             int neighbor;
             while ((neighbor = neighbors.nextInt()) != -1) {
-                // Don't count seeds themselves
                 if (!seedIds.contains(neighbor)) {
-                    candidateCounts.merge(neighbor, 1, Integer::sum);
+                    candidateCounts.addTo(neighbor, 1);
                 }
             }
 
@@ -213,30 +193,72 @@ public class DiscoveryTool {
         long discoveryTime = System.currentTimeMillis() - startTime;
         System.out.println("Found " + String.format("%,d", candidateCounts.size()) + " unique candidate domains");
         System.out.println("Discovery time: " + (discoveryTime / 1000.0) + " seconds");
-        System.out.println();
 
         // Filter by minimum connection threshold
-        System.out.println("Filtering by threshold >= " + minConnections + "...");
-        List<Map.Entry<Integer, Integer>> results = new ArrayList<>();
-        for (Map.Entry<Integer, Integer> entry : candidateCounts.entrySet()) {
-            if (entry.getValue() >= minConnections) {
-                results.add(entry);
+        System.out.println("\nFiltering by threshold >= " + minConnections + "...");
+        IntArrayList resultIds = new IntArrayList();
+        IntArrayList resultCounts = new IntArrayList();
+
+        for (Int2IntMap.Entry entry : candidateCounts.int2IntEntrySet()) {
+            if (entry.getIntValue() >= minConnections) {
+                resultIds.add(entry.getIntKey());
+                resultCounts.add(entry.getIntValue());
             }
         }
 
-        // Sort by connection count descending
-        results.sort((a, b) -> b.getValue() - a.getValue());
-        System.out.println("Found " + String.format("%,d", results.size()) + " domains meeting threshold");
-        System.out.println();
+        System.out.println("Found " + String.format("%,d", resultIds.size()) + " domains meeting threshold");
+
+        // Free memory before second pass
+        candidateCounts = null;
+        graph = null;
+        System.gc();
+
+        // PASS 2: Look up domain names only for results (memory efficient)
+        System.out.println("\nLooking up result domain names...");
+        startTime = System.currentTimeMillis();
+
+        IntSet resultIdSet = new IntOpenHashSet(resultIds);
+        Int2ObjectOpenHashMap<String> resultIdToDomain = new Int2ObjectOpenHashMap<>();
+
+        try (BufferedReader br = new BufferedReader(
+                new InputStreamReader(
+                    new GZIPInputStream(
+                        new FileInputStream(verticesFile))))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                String[] parts = line.split("\t");
+                if (parts.length >= 2) {
+                    int id = Integer.parseInt(parts[0]);
+                    if (resultIdSet.contains(id)) {
+                        String revDomain = parts[1];
+                        String domain = reverseDomain(revDomain);
+                        resultIdToDomain.put(id, domain);
+
+                        if (resultIdToDomain.size() == resultIds.size()) {
+                            break; // Found all results
+                        }
+                    }
+                }
+            }
+        }
+
+        scanTime = System.currentTimeMillis() - startTime;
+        System.out.println("Lookup time: " + (scanTime / 1000.0) + " seconds");
+
+        // Sort results by connection count descending
+        Integer[] indices = new Integer[resultIds.size()];
+        for (int i = 0; i < indices.length; i++) indices[i] = i;
+        Arrays.sort(indices, (a, b) -> resultCounts.getInt(b) - resultCounts.getInt(a));
 
         // Write results to CSV
-        System.out.println("Writing results to " + outputFile + "...");
+        System.out.println("\nWriting results to " + outputFile + "...");
         try (PrintWriter pw = new PrintWriter(new FileWriter(outputFile))) {
             pw.println("domain,connections,percentage");
-            for (Map.Entry<Integer, Integer> entry : results) {
-                String domain = idToDomain.get(entry.getKey());
+            for (int idx : indices) {
+                int id = resultIds.getInt(idx);
+                int connections = resultCounts.getInt(idx);
+                String domain = resultIdToDomain.get(id);
                 if (domain != null) {
-                    int connections = entry.getValue();
                     double percentage = (connections * 100.0) / seedIds.size();
                     pw.printf("%s,%d,%.2f%n", domain, connections, percentage);
                 }
@@ -246,7 +268,7 @@ public class DiscoveryTool {
         System.out.println();
         System.out.println("=".repeat(60));
         System.out.println("Discovery complete!");
-        System.out.println("Results: " + String.format("%,d", results.size()) + " domains");
+        System.out.println("Results: " + String.format("%,d", resultIds.size()) + " domains");
         System.out.println("Output: " + outputFile);
         System.out.println("=".repeat(60));
     }
