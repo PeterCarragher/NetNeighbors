@@ -2,12 +2,24 @@
 # Verification script for NetNeighbors installation
 # Checks all required components are present
 
-WEBGRAPH_DIR="${1:-/content/webgraph}"
+# Auto-detect base directory (Colab uses /content, otherwise use script's parent dir)
+if [ -d "/content" ]; then
+    BASE_DIR="/content"
+else
+    # Get the directory containing this script, then go up to find base
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    BASE_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+fi
+
+WEBGRAPH_DIR="${1:-$BASE_DIR/webgraph}"
 VERSION="${2:-cc-main-2025-26-nov-dec-jan}"
+CC_WEBGRAPH_DIR="${3:-$BASE_DIR/cc-webgraph}"
+NETNEIGHBORS_DIR="${4:-$SCRIPT_DIR/..}"
 
 echo "============================================================"
 echo "           INSTALLATION VERIFICATION"
 echo "============================================================"
+echo "Base directory: $BASE_DIR"
 echo ""
 
 ALL_PASSED=true
@@ -25,23 +37,23 @@ fi
 # Check cc-webgraph JAR
 echo ""
 echo "2. cc-webgraph Tools:"
-JAR_PATH="/content/cc-webgraph/target/cc-webgraph-0.1-SNAPSHOT-jar-with-dependencies.jar"
+JAR_PATH="$CC_WEBGRAPH_DIR/target/cc-webgraph-0.1-SNAPSHOT-jar-with-dependencies.jar"
 if [ -f "$JAR_PATH" ]; then
     SIZE_MB=$(du -m "$JAR_PATH" | cut -f1)
     echo "   ✅ JAR file found (${SIZE_MB} MB)"
 else
-    echo "   ❌ JAR file not found"
+    echo "   ❌ JAR file not found at $JAR_PATH"
     ALL_PASSED=false
 fi
 
 # Check DiscoveryTool
 echo ""
 echo "3. DiscoveryTool:"
-TOOL_PATH="/content/NetNeighbors/bin/DiscoveryTool.class"
+TOOL_PATH="$NETNEIGHBORS_DIR/bin/DiscoveryTool.class"
 if [ -f "$TOOL_PATH" ]; then
     echo "   ✅ DiscoveryTool compiled"
 else
-    echo "   ❌ DiscoveryTool not found"
+    echo "   ❌ DiscoveryTool not found at $TOOL_PATH"
     ALL_PASSED=false
 fi
 
@@ -66,8 +78,10 @@ check_file() {
 check_file "${VERSION}-domain-vertices.txt.gz" "Vertices (domain mapping)"
 check_file "${VERSION}-domain.graph" "Forward graph (outlinks)"
 check_file "${VERSION}-domain.properties" "Forward graph properties"
+check_file "${VERSION}-domain.offsets" "Forward graph offsets"
 check_file "${VERSION}-domain-t.graph" "Transpose graph (backlinks)"
 check_file "${VERSION}-domain-t.properties" "Transpose graph properties"
+check_file "${VERSION}-domain-t.offsets" "Transpose graph offsets"
 check_file "${VERSION}-domain.stats" "Graph statistics"
 
 # Read stats file if available

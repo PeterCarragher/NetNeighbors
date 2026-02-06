@@ -9,7 +9,26 @@ import subprocess
 import pandas as pd
 import os
 import gzip
+import tempfile
 from typing import List, Tuple
+
+
+def _detect_base_dir() -> str:
+    """Auto-detect base directory (parent of NetNeighbors, where cc-webgraph lives)."""
+    if os.path.exists("/content"):
+        return "/content"
+    # Running from inside NetNeighbors, base is parent directory
+    return os.path.dirname(os.getcwd())
+
+
+def _detect_netneighbors_dir() -> str:
+    """Find NetNeighbors directory (current working directory when running from notebook)."""
+    # When notebook sets cwd to NetNeighbors, this is just cwd
+    cwd = os.getcwd()
+    if os.path.exists(os.path.join(cwd, "src", "DiscoveryTool.java")):
+        return cwd
+    # Fallback to directory containing this file
+    return os.path.dirname(os.path.abspath(__file__))
 
 
 class WebgraphDiscovery:
@@ -17,11 +36,19 @@ class WebgraphDiscovery:
     Wrapper class for running webgraph discovery using the DiscoveryTool.
     """
 
-    def __init__(self, webgraph_dir: str, version: str):
+    def __init__(self, webgraph_dir: str, version: str, base_dir: str = None):
         self.webgraph_dir = webgraph_dir
         self.version = version
-        self.jar_path = "/content/cc-webgraph/target/cc-webgraph-0.1-SNAPSHOT-jar-with-dependencies.jar"
-        self.tool_class_path = "/content/NetNeighbors/bin"
+
+        # Auto-detect base directory if not provided
+        if base_dir is None:
+            base_dir = _detect_base_dir()
+        self.base_dir = base_dir
+
+        # Set paths relative to base directory
+        self.jar_path = os.path.join(base_dir, "cc-webgraph", "target",
+                                      "cc-webgraph-0.1-SNAPSHOT-jar-with-dependencies.jar")
+        self.tool_class_path = os.path.join(_detect_netneighbors_dir(), "bin")
         self.graph_base = os.path.join(webgraph_dir, f"{version}-domain")
         self.vertices_file = os.path.join(webgraph_dir, f"{version}-domain-vertices.txt.gz")
 
@@ -67,7 +94,8 @@ class WebgraphDiscovery:
     def discover(self,
                  seed_domains: List[str],
                  min_connections: int,
-                 direction: str = 'backlinks') -> pd.DataFrame:
+                 direction: str = 'backlinks',
+                 output_file: str = None) -> pd.DataFrame:
         """
         Run discovery algorithm using the DiscoveryTool.
 
@@ -75,17 +103,32 @@ class WebgraphDiscovery:
             seed_domains: List of seed domain names
             min_connections: Minimum number of connections to include in results
             direction: 'backlinks' (who links TO seeds) or 'outlinks' (who seeds link TO)
+            output_file: Path to save results CSV. If None, uses temp file (Colab uses /content/results.csv)
 
         Returns:
             DataFrame with columns: domain, connections, percentage
         """
-        # Write seeds to file
-        seeds_file = '/content/seeds.txt'
-        with open(seeds_file, 'w') as f:
-            for domain in seed_domains:
-                f.write(domain.strip().lower() + '\n')
+        # Write seeds to temp file
+        seeds_fd, seeds_file = tempfile.mkstemp(suffix='.txt', prefix='seeds_')
+        try:
+            with os.fdopen(seeds_fd, 'w') as f:
+                for domain in seed_domains:
+                    f.write(domain.strip().lower() + '\n')
+        except:
+            os.close(seeds_fd)
+            raise
 
-        results_file = '/content/results.csv'
+        # Determine results file location
+        if output_file is not None:
+            results_file = output_file
+        elif os.path.exists("/content"):
+            # Colab: use /content for easy download link
+            results_file = '/content/results.csv'
+        else:
+            # Local: use temp file
+            _, results_file = tempfile.mkstemp(suffix='.csv', prefix='results_')
+
+        self._last_results_file = results_file  # Store for later access
 
         # Build Java command
         cmd = [
@@ -135,3 +178,7 @@ class WebgraphDiscovery:
             raise Exception("Discovery timed out (>10 minutes). Try fewer seed domains.")
         except Exception as e:
             raise Exception(f"Discovery error: {str(e)}")
+        finally:
+            # Clean up temp seeds file
+            if os.path.exists(seeds_file):
+                os.remove(seeds_file)
