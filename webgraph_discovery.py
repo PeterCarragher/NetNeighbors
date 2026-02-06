@@ -123,9 +123,10 @@ class WebgraphDiscovery:
         self._last_results_file = results_file  # Store for later access
 
         # Build Java command
+        # Use moderate heap since graph is memory-mapped (uses OS page cache, not heap)
         cmd = [
             'java',
-            '-Xmx48g',  # Use 48GB heap
+            '-Xmx24g',  # Reduced heap - graph uses memory-mapped I/O
             '-cp', f'{self.jar_path}:{self.tool_class_path}',
             'DiscoveryTool',
             '--graph', self.graph_base,

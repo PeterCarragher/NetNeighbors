@@ -158,9 +158,19 @@ if [ ! -d "$BASE_DIR/NetNeighbors" ] && [ "$NETNEIGHBORS_DIR" != "$BASE_DIR/NetN
     NETNEIGHBORS_DIR="$BASE_DIR/NetNeighbors"
 fi
 
-# Always compile DiscoveryTool if not present
+# Compile DiscoveryTool if missing or source is newer
 DISCOVERY_CLASS="$NETNEIGHBORS_DIR/bin/DiscoveryTool.class"
+DISCOVERY_SRC="$NETNEIGHBORS_DIR/src/DiscoveryTool.java"
+
+NEEDS_COMPILE=false
 if [ ! -f "$DISCOVERY_CLASS" ]; then
+    NEEDS_COMPILE=true
+elif [ "$DISCOVERY_SRC" -nt "$DISCOVERY_CLASS" ]; then
+    echo "   Source file updated, recompiling..."
+    NEEDS_COMPILE=true
+fi
+
+if [ "$NEEDS_COMPILE" = true ]; then
     echo "   Compiling DiscoveryTool..."
     mkdir -p "$NETNEIGHBORS_DIR/bin"
     javac -cp "$CC_WEBGRAPH_JAR" \

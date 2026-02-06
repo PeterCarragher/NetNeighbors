@@ -159,13 +159,15 @@ public class DiscoveryTool {
             System.exit(1);
         }
 
-        // Load the graph
-        System.out.println("\nLoading graph...");
+        // Load the graph using memory-mapped I/O (minimal heap usage)
+        System.out.println("\nLoading graph (memory-mapped)...");
+        printMemoryUsage("Before graph load");
         startTime = System.currentTimeMillis();
-        BVGraph graph = BVGraph.load(graphPath);
+        ImmutableGraph graph = ImmutableGraph.loadMapped(graphPath);
         long loadTime = System.currentTimeMillis() - startTime;
         System.out.println("Graph loaded: " + String.format("%,d", graph.numNodes()) + " nodes");
         System.out.println("Load time: " + (loadTime / 1000.0) + " seconds");
+        printMemoryUsage("After graph load");
 
         // Run discovery
         System.out.println("\nRunning discovery (" + direction + ")...");
@@ -193,6 +195,7 @@ public class DiscoveryTool {
         long discoveryTime = System.currentTimeMillis() - startTime;
         System.out.println("Found " + String.format("%,d", candidateCounts.size()) + " unique candidate domains");
         System.out.println("Discovery time: " + (discoveryTime / 1000.0) + " seconds");
+        printMemoryUsage("After discovery");
 
         // Filter by minimum connection threshold
         System.out.println("\nFiltering by threshold >= " + minConnections + "...");
@@ -284,5 +287,15 @@ public class DiscoveryTool {
             sb.append(parts[i]);
         }
         return sb.toString();
+    }
+
+    /**
+     * Print current memory usage for diagnostics
+     */
+    private void printMemoryUsage(String label) {
+        Runtime rt = Runtime.getRuntime();
+        long used = (rt.totalMemory() - rt.freeMemory()) / (1024 * 1024);
+        long max = rt.maxMemory() / (1024 * 1024);
+        System.out.println(String.format("[Memory] %s: %,d MB used / %,d MB max", label, used, max));
     }
 }
