@@ -98,8 +98,17 @@ java -version 2>&1 | head -1
 if [ "$LOCAL_MODE" = false ]; then
     echo ""
     echo "2. Installing gcsfuse..."
-    apt-get install -y -qq gcsfuse > /dev/null 2>&1
-    echo "   ✅ gcsfuse installed"
+    if ! command -v gcsfuse &> /dev/null; then
+        # Add Google Cloud apt repository for gcsfuse
+        export GCSFUSE_REPO=gcsfuse-$(lsb_release -c -s)
+        echo "deb https://packages.cloud.google.com/apt $GCSFUSE_REPO main" | tee /etc/apt/sources.list.d/gcsfuse.list > /dev/null
+        curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add - > /dev/null 2>&1
+        apt-get update -qq > /dev/null 2>&1
+        apt-get install -y -qq gcsfuse > /dev/null 2>&1
+        echo "   ✅ gcsfuse installed"
+    else
+        echo "   ✅ gcsfuse already installed"
+    fi
 else
     echo ""
     echo "2. Skipping gcsfuse (local mode, not needed)"
