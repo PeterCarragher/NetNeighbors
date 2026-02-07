@@ -19,43 +19,37 @@ Given a list of seed domains, discovers other domains that are connected via bac
 
 **⏱️ Time: ~15 minutes (first time only)**
 
-### Step 1: Enable High-RAM Runtime (REQUIRED)
+### Step 0: (Optional) Setup host with sufficient resources - Colab example
+Basic colab notebooks offer enough RAM and HDD space to download the commoncrawl webgraph and keep the graph in memory using the JVM bridge. 
+However, performance may be slow for queries. In practice, running this on a colab-pro notebook will have much faster query times over the JVM bridge.
 
 1. Click **Runtime** → **Change runtime type**
 2. Set **Runtime shape** to **High-RAM** ⚠️
-3. Set **Hardware accelerator** to **GPU** (optional, for faster processing)
-4. Click **Save**
+3. Click **Save**
 
-*Why? The CommonCrawl webgraph requires >40GB RAM to process.*
-
-### Step 2: (Optional) Mount Google Drive
-
-**Recommended!** This caches the ~23GB webgraph so you don't re-download it every session.
-
-Run the "Mount Google Drive" cell below and follow the prompts.
-
-### Step 3: Run Setup Cells (One-Time)
+### Step 1: Run Setup Cells (One-Time)
 
 **▶️ Click Run on each setup cell in order:**
 
 1. **Check Available RAM** - Verifies you have enough memory
-2. **Mount Google Drive** - (Optional) For persistent caching
+2. **Mount Google Cloud Bucket** - (Optional) For persistent caching
 3. **Install Java 17** - Required for WebGraph (~2 min)
 4. **Download cc-webgraph Tools** - Clones and builds tools (~2 min)
 5. **Download CommonCrawl Webgraph** - Downloads pre-built graph files (~10 min for 23GB)
 6. **Verify Installation** - Confirms everything is ready
 
-**Note:** Graph files are pre-built by CommonCrawl - no build step needed!
+**Note:** Graph files are pre-built by CommonCrawl - no build step needed! Using a Google Cloud Bucket caches the ~23GB webgraph so you don't re-download it every session.
 
-### Step 4: Use the Discovery Form
-
-Scroll down to **Section 3: Discovery Interface** and interact with the form!
+### Step 3: Use the Discovery Interface
+```bash
+WEBGRAPH_DIR=/content/webgraphs/ WEBGRAPH_VERSION=cc-main-2024-feb-apr-may python discovery_network_vis.py
+```
 
 ---
 
 ## 📚 Citation & References
 
-If you use this notebook in your research, please cite:
+If you use this notebook or the discovery interface in your research, please cite:
 
 ```bibtex
 @article{carragher2024detection,
@@ -72,7 +66,8 @@ If you use this notebook in your research, please cite:
   title={Misinformation Resilient Search Rankings with Attributed Webgraphs},
   author={Carragher, Peter and Williams, Evan M and Spezzano, Francesca and Carley, Kathleen M},
   journal={ACM Transactions on Intelligent Systems and Technology},
-  year={2025}
+  year={2025},
+  url={https://dl.acm.org/doi/pdf/10.1145/3670410}
 }
 ```
 
