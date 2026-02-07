@@ -249,10 +249,10 @@ app.layout = html.Div([
                            href='https://github.com/commoncrawl/cc-webgraph',
                            target='_blank'),
                     html.A(html.Div('NetNeighbors (GitHub)', className='nav-dropdown-item'),
-                           href='https://github.com/casos-icalp-cmu/NetNeighbors',
+                           href='https://github.com/PeterCarragher/NetNeighbors',
                            target='_blank'),
-                    html.A(html.Div('Common Crawl Web Graph Paper', className='nav-dropdown-item'),
-                           href='https://doi.org/10.1145/3487553.3524241',
+                    html.A(html.Div('NetNeighbors Paper (ACM)', className='nav-dropdown-item'),
+                           href='https://dl.acm.org/doi/pdf/10.1145/3670410',
                            target='_blank'),
                 ], className='nav-dropdown')
             ], className='nav-menu'),
@@ -434,6 +434,8 @@ app.layout = html.Div([
     html.Button(id='delete-trigger-btn', style={'display': 'none'}, n_clicks=0),
     dcc.Store(id='focus-domain', data=None),
     dcc.Store(id='center-ack', data=None),
+    dcc.Store(id='pending-elements', data=None),
+    dcc.ConfirmDialog(id='confirm-dialog', message=''),
     dcc.Download(id='export-download'),
 ], id='root-container')
 
@@ -605,9 +607,14 @@ def update_slider_max(selected_nodes):
     return max_val, value, marks, label
 
 
-# CB6: Context Menu Discover
+NODE_WARNING_THRESHOLD = 150
+
+# CB6: Context Menu Discover (with large-result warning)
 @app.callback(
-    Output('cytoscape-graph', 'elements', allow_duplicate=True),
+    [Output('cytoscape-graph', 'elements', allow_duplicate=True),
+     Output('pending-elements', 'data'),
+     Output('confirm-dialog', 'displayed'),
+     Output('confirm-dialog', 'message')],
     Input('discover-btn', 'n_clicks'),
     [State('cytoscape-graph', 'selectedNodeData'),
      State('ctx-direction-radio', 'value'),
@@ -620,17 +627,46 @@ def context_menu_discover(n_clicks, selected_nodes, direction, min_conn, current
         raise PreventUpdate
 
     seed_domains = [node['id'] for node in selected_nodes]
-
     new_nodes, new_edges = explorer.discover_neighbors(seed_domains, min_conn, direction)
 
     elements = list(current_elements) if current_elements else []
     existing_ids = {
         e['data']['id'] for e in elements if 'source' not in e['data']
     }
-
     unique_nodes = [n for n in new_nodes if n['data']['id'] not in existing_ids]
+
+    if len(unique_nodes) > NODE_WARNING_THRESHOLD:
+        msg = (f"This will add {len(unique_nodes)} nodes to the viewport, "
+               f"which may affect the visualizer's performance. Continue?")
+        return elements, {'nodes': unique_nodes, 'edges': new_edges}, True, msg
+
     elements.extend(unique_nodes)
     elements.extend(new_edges)
+    return elements, None, False, ''
+
+
+# CB10: Confirm large discovery
+@app.callback(
+    Output('cytoscape-graph', 'elements', allow_duplicate=True),
+    Input('confirm-dialog', 'submit_n_clicks'),
+    [State('pending-elements', 'data'),
+     State('cytoscape-graph', 'elements')],
+    prevent_initial_call=True
+)
+def confirm_large_discovery(submit_clicks, pending, current_elements):
+    if not submit_clicks or not pending:
+        raise PreventUpdate
+
+    elements = list(current_elements) if current_elements else []
+    existing_ids = {
+        e['data']['id'] for e in elements if 'source' not in e['data']
+    }
+
+    for node in pending['nodes']:
+        if node['data']['id'] not in existing_ids:
+            elements.append(node)
+            existing_ids.add(node['data']['id'])
+    elements.extend(pending['edges'])
 
     return elements
 
