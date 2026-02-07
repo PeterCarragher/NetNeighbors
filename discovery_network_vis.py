@@ -234,7 +234,7 @@ stylesheet = [
 ]
 
 # ----- Layout -----
-# cyto.load_extra_layouts()
+cyto.load_extra_layouts()
 app.layout = html.Div([
     # ===== Navbar =====
     html.Div([
@@ -375,7 +375,7 @@ app.layout = html.Div([
             cyto.Cytoscape(
                 id='cytoscape-graph',
                 layout={
-                    'name': 'cose',
+                    'name': 'fcose',
                     'animate': 'end',
                     'animationDuration': 100,
                     'nodeRepulsion': 400000,

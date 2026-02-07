@@ -1,3 +1,6 @@
+substitutions:
+  _TAG: latest
+
 steps:
   # Create Artifact Registry repo (idempotent)
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
@@ -17,14 +20,12 @@ steps:
     args:
       - 'build'
       - '-t'
-      - 'us-central1-docker.pkg.dev/$PROJECT_ID/netneighbors/app:$COMMIT_SHA'
-      - '-t'
-      - 'us-central1-docker.pkg.dev/$PROJECT_ID/netneighbors/app:latest'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/netneighbors/app:${_TAG}'
       - '.'
 
   # Push to Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', '--all-tags', 'us-central1-docker.pkg.dev/$PROJECT_ID/netneighbors/app']
+    args: ['push', 'us-central1-docker.pkg.dev/$PROJECT_ID/netneighbors/app:${_TAG}']
 
   # Deploy to Cloud Run with GCS FUSE volume for webgraph data
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
@@ -34,7 +35,7 @@ steps:
       - 'deploy'
       - 'netneighbors'
       - '--image'
-      - 'us-central1-docker.pkg.dev/$PROJECT_ID/netneighbors/app:$COMMIT_SHA'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/netneighbors/app:${_TAG}'
       - '--region'
       - 'us-central1'
       - '--platform'
@@ -51,7 +52,7 @@ steps:
       - '1'
       - '--timeout'
       - '300'
-      - '--startup-cpu-boost'
+      - '--cpu-boost'
       - '--set-env-vars'
       - 'WEBGRAPH_DIR=/data/webgraph,WEBGRAPH_VERSION=cc-main-2024-feb-apr-may,CC_WEBGRAPH_JAR=/app/cc-webgraph.jar'
       - '--add-volume=name=webgraph-data,type=cloud-storage,bucket=commoncrawl_webgraph'
@@ -59,8 +60,7 @@ steps:
       - '--allow-unauthenticated'
 
 images:
-  - 'us-central1-docker.pkg.dev/$PROJECT_ID/netneighbors/app:$COMMIT_SHA'
-  - 'us-central1-docker.pkg.dev/$PROJECT_ID/netneighbors/app:latest'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/netneighbors/app:${_TAG}'
 
 options:
   machineType: 'E2_HIGHCPU_8'

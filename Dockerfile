@@ -5,8 +5,14 @@ RUN git clone --depth 1 https://github.com/commoncrawl/cc-webgraph.git /build/cc
 WORKDIR /build/cc-webgraph
 RUN mvn clean package -DskipTests -q
 
+# Compile DiscoveryTool in the builder stage (has JDK)
+COPY src/ /build/src/
+RUN mkdir -p /build/bin && \
+    javac -cp /build/cc-webgraph/target/cc-webgraph-0.1-SNAPSHOT-jar-with-dependencies.jar \
+        -d /build/bin /build/src/DiscoveryTool.java
 
-# Stage 2: Runtime
+
+# Stage 2: Runtime (JRE only, no compiler needed)
 FROM eclipse-temurin:17-jre
 
 # Install Python
@@ -16,13 +22,9 @@ RUN apt-get update && \
 
 WORKDIR /app
 
-# Copy cc-webgraph JAR
+# Copy cc-webgraph JAR and compiled classes from builder
 COPY --from=builder /build/cc-webgraph/target/cc-webgraph-0.1-SNAPSHOT-jar-with-dependencies.jar /app/cc-webgraph.jar
-
-# Compile DiscoveryTool (used by webgraph_discovery.py subprocess fallback)
-COPY src/ /app/src/
-RUN mkdir -p /app/bin && \
-    javac -cp /app/cc-webgraph.jar -d /app/bin /app/src/DiscoveryTool.java
+COPY --from=builder /build/bin/ /app/bin/
 
 # Install Python dependencies
 COPY requirements.txt /app/
