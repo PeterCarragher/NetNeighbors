@@ -230,28 +230,28 @@ app.layout = html.Div([
         html.Div([
             # Export menu
             html.Div([
-                html.Span("Export", className='nav-menu-label'),
+                html.Span("export", className='nav-menu-label'),
                 html.Div([
-                    html.Div('Node List (.csv)', id={'type': 'export-btn', 'index': 'csv-nodes'},
+                    html.Div('node list (.csv)', id={'type': 'export-btn', 'index': 'csv-nodes'},
                              className='nav-dropdown-item', n_clicks=0),
-                    html.Div('Edge List (.csv)', id={'type': 'export-btn', 'index': 'csv-edges'},
+                    html.Div('edge list (.csv)', id={'type': 'export-btn', 'index': 'csv-edges'},
                              className='nav-dropdown-item', n_clicks=0),
-                    html.Div('Graph (.gexf)', id={'type': 'export-btn', 'index': 'gexf'},
+                    html.Div('graph (.gexf)', id={'type': 'export-btn', 'index': 'gexf'},
                              className='nav-dropdown-item', n_clicks=0),
                 ], className='nav-dropdown')
             ], className='nav-menu'),
 
             # Resources menu
             html.Div([
-                html.Span("Resources", className='nav-menu-label'),
+                html.Span("resources", className='nav-menu-label'),
                 html.Div([
-                    html.A(html.Div('cc-webgraph (GitHub)', className='nav-dropdown-item'),
+                    html.A(html.Div('cc-webgraph (github)', className='nav-dropdown-item'),
                            href='https://github.com/commoncrawl/cc-webgraph',
                            target='_blank'),
-                    html.A(html.Div('NetNeighbors (GitHub)', className='nav-dropdown-item'),
+                    html.A(html.Div('net_neighbor (github)', className='nav-dropdown-item'),
                            href='https://github.com/PeterCarragher/NetNeighbors',
                            target='_blank'),
-                    html.A(html.Div('NetNeighbors Paper (ACM)', className='nav-dropdown-item'),
+                    html.A(html.Div('net_neighbor paper (acm)', className='nav-dropdown-item'),
                            href='https://dl.acm.org/doi/pdf/10.1145/3670410',
                            target='_blank'),
                 ], className='nav-dropdown')
@@ -259,15 +259,15 @@ app.layout = html.Div([
 
             # Help menu
             html.Div([
-                html.Span("Help", className='nav-menu-label'),
+                html.Span("help", className='nav-menu-label'),
                 html.Div([
-                    html.Div([html.Strong("Add nodes"), " \u2014 type domains in the left pane textarea, click Add to Viewport"],
+                    html.Div([html.Strong("add nodes"), " \u2014 type domains in the left pane textarea, click add to viewport"],
                              className='nav-dropdown-item', style={'cursor': 'default'}),
-                    html.Div([html.Strong("Select nodes"), " \u2014 click a node, or box-select by dragging on the canvas"],
+                    html.Div([html.Strong("select nodes"), " \u2014 click a node, or box-select by dragging on the canvas"],
                              className='nav-dropdown-item', style={'cursor': 'default'}),
-                    html.Div([html.Strong("Delete nodes"), " \u2014 select nodes, then press Delete or Backspace"],
+                    html.Div([html.Strong("delete nodes"), " \u2014 select nodes, then press delete or backspace"],
                              className='nav-dropdown-item', style={'cursor': 'default'}),
-                    html.Div([html.Strong("Discover"), " \u2014 select nodes, right-click \u2192 set options \u2192 Discover"],
+                    html.Div([html.Strong("discover"), " \u2014 select nodes, right-click \u2192 set options \u2192 discover"],
                              className='nav-dropdown-item', style={'cursor': 'default'}),
                 ], className='nav-dropdown', style={'min-width': '340px'})
             ], className='nav-menu'),
@@ -282,7 +282,7 @@ app.layout = html.Div([
             dcc.Input(
                 id='domain-search',
                 type='text',
-                placeholder='Search domains...',
+                placeholder='search domains...',
                 style={
                     'width': '100%',
                     'padding': '8px 12px',
@@ -297,7 +297,7 @@ app.layout = html.Div([
             # Domain list (fills available space)
             html.Div(id='domain-list-container', children=[
                 html.Div(
-                    "No domains yet. Add some below.",
+                    "no domains yet. add some below.",
                     style={'color': '#999', 'font-style': 'italic', 'padding': '20px', 'text-align': 'center'}
                 )
             ]),
@@ -306,7 +306,7 @@ app.layout = html.Div([
             html.Div([
                 dcc.Textarea(
                     id='new-domains-input',
-                    placeholder='Enter new domains...\none per line',
+                    placeholder='enter new domains...\none per line',
                     style={
                         'width': '100%',
                         'height': '80px',
@@ -322,7 +322,7 @@ app.layout = html.Div([
                 html.Div([
                     dcc.Upload(
                         id='file-upload',
-                        children=html.Button('Import from File', style={
+                        children=html.Button('import from file', style={
                             'padding': '6px 10px',
                             'background': '#95a5a6',
                             'color': 'white',
@@ -333,7 +333,7 @@ app.layout = html.Div([
                         }),
                         multiple=False
                     ),
-                    html.Button('Add to Viewport', id='add-viewport-btn', n_clicks=0, style={
+                    html.Button('add to viewport', id='add-viewport-btn', n_clicks=0, style={
                         'padding': '6px 10px',
                         'background': '#4ecdc4',
                         'color': 'white',
@@ -385,21 +385,21 @@ app.layout = html.Div([
 
             # Context menu (hidden by default, positioned by JS)
             html.Div([
-                html.H4("Discovery Settings"),
+                html.H4("discovery settings"),
                 html.Div([
-                    html.Label("Direction:", style={'font-weight': 'bold', 'font-size': '13px'}),
+                    html.Label("direction:", style={'font-weight': 'bold', 'font-size': '13px'}),
                     dcc.RadioItems(
                         id='ctx-direction-radio',
                         options=[
-                            {'label': ' Backlinks', 'value': 'backlinks'},
-                            {'label': ' Outlinks', 'value': 'outlinks'}
+                            {'label': ' backlinks', 'value': 'backlinks'},
+                            {'label': ' outlinks', 'value': 'outlinks'}
                         ],
                         value='backlinks',
                         style={'margin': '6px 0', 'font-size': '13px'}
                     )
                 ]),
                 html.Div([
-                    html.Label("Min Connections:", style={'font-weight': 'bold', 'font-size': '13px'}),
+                    html.Label("min connections:", style={'font-weight': 'bold', 'font-size': '13px'}),
                     dcc.Slider(
                         id='ctx-min-conn-slider',
                         min=1,
@@ -413,7 +413,7 @@ app.layout = html.Div([
                 html.Div(id='ctx-selection-count',
                          children='0 node(s) selected',
                          style={'font-size': '12px', 'color': '#666', 'margin': '6px 0'}),
-                html.Button('Discover', id='discover-btn', n_clicks=0, style={
+                html.Button('discover', id='discover-btn', n_clicks=0, style={
                     'width': '100%',
                     'padding': '10px',
                     'background': '#667eea',
@@ -451,7 +451,7 @@ app.layout = html.Div([
 def update_domain_list(elements, search_text):
     if not elements:
         return html.Div(
-            "No domains yet. Add some below.",
+            "no domains yet. add some below.",
             style={'color': '#999', 'font-style': 'italic', 'padding': '20px', 'text-align': 'center'}
         )
 
@@ -468,7 +468,7 @@ def update_domain_list(elements, search_text):
 
     if not domains:
         return html.Div(
-            "No matching domains.",
+            "no matching domains.",
             style={'color': '#999', 'font-style': 'italic', 'padding': '20px', 'text-align': 'center'}
         )
 
@@ -636,8 +636,8 @@ def context_menu_discover(n_clicks, selected_nodes, direction, min_conn, current
     unique_nodes = [n for n in new_nodes if n['data']['id'] not in existing_ids]
 
     if len(unique_nodes) > NODE_WARNING_THRESHOLD:
-        msg = (f"This will add {len(unique_nodes)} nodes to the viewport, "
-               f"which may affect the visualizer's performance. Continue?")
+        msg = (f"this will add {len(unique_nodes)} nodes to the viewport, "
+               f"which may affect the visualizer's performance. continue?")
         return elements, {'nodes': unique_nodes, 'edges': new_edges}, True, msg
 
     elements.extend(unique_nodes)
