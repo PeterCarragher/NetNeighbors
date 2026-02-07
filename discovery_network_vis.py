@@ -230,7 +230,7 @@ stylesheet = [
 ]
 
 # ----- Layout -----
-
+# cyto.load_extra_layouts()
 app.layout = html.Div([
     # ===== Navbar =====
     html.Div([
@@ -372,17 +372,19 @@ app.layout = html.Div([
                 id='cytoscape-graph',
                 layout={
                     'name': 'cose',
-                    'animate': True,
-                    'animationDuration': 500,
+                    'animate': 'end',
+                    'animationDuration': 100,
                     'nodeRepulsion': 400000,
                     'idealEdgeLength': 100,
                     'edgeElasticity': 100,
                     'nestingFactor': 5,
                     'gravity': 80,
-                    'numIter': 1000,
+                    'numIter': 100,
                     'initialTemp': 200,
                     'coolingFactor': 0.95,
-                    'minTemp': 1.0
+                    'minTemp': 1.0,
+                    'fit': True,
+                    'padding': 30,
                 },
                 style={'width': '100%', 'height': '100%', 'background': '#f8f9fa'},
                 elements=[],
@@ -847,4 +849,5 @@ def export_graph(n_clicks_list, elements):
 
 
 if __name__ == '__main__':
-    app.run(debug=True, use_reloader=False, port=8050)
+    port = int(os.environ.get('PORT', 8050))
+    app.run(debug=False, host='0.0.0.0', port=port)

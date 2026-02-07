@@ -1,5 +1,24 @@
-// Right-click context menu for graph area
+// Right-click context menu and performance setup for graph area
 document.addEventListener('DOMContentLoaded', function() {
+
+    // --- Cytoscape.js renderer performance options ---
+    // These can't be set via dash-cytoscape props; must be set on the cy instance.
+    // textureOnViewport: renders to a texture during pan/zoom (faster redraws)
+    // hideEdgesOnViewport: skips edge drawing during pan/zoom
+    // hideLabelsOnViewport: skips label drawing during pan/zoom
+    (function initCyPerformance() {
+        var cyEl = document.getElementById('cytoscape-graph');
+        if (!cyEl || !cyEl._cyreg || !cyEl._cyreg.cy) {
+            setTimeout(initCyPerformance, 200);
+            return;
+        }
+        var r = cyEl._cyreg.cy.renderer();
+        if (r && r.options) {
+            r.options.textureOnViewport = true;
+            r.options.hideEdgesOnViewport = true;
+            r.options.hideLabelsOnViewport = true;
+        }
+    })();
 
     // --- Right-click context menu ---
     document.addEventListener('contextmenu', function(e) {
