@@ -1,9 +1,12 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap');
+
 /* Full-page layout */
 html, body {
     margin: 0;
     padding: 0;
     height: 100%;
     overflow: hidden;
+    font-family: 'Space Mono', monospace;
 }
 
 #root-container {
