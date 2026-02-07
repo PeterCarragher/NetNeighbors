@@ -153,6 +153,7 @@ stylesheet = [
             'width': 60,
             'height': 60,
             'font-size': 11,
+            'min-zoomed-font-size': 4,
             'color': '#fff',
             'text-outline-color': '#000',
             'text-outline-width': 2,
@@ -169,6 +170,7 @@ stylesheet = [
             'width': 'mapData(connections, 1, 50, 25, 50)',
             'height': 'mapData(connections, 1, 50, 25, 50)',
             'font-size': 10,
+            'min-zoomed-font-size': 10,
             'color': '#000'
         }
     },
@@ -181,6 +183,7 @@ stylesheet = [
             'width': 'mapData(connections, 1, 50, 25, 50)',
             'height': 'mapData(connections, 1, 50, 25, 50)',
             'font-size': 9,
+            'min-zoomed-font-size': 9,
             'color': '#000'
         }
     },
@@ -193,6 +196,7 @@ stylesheet = [
             'width': 'mapData(connections, 1, 50, 25, 50)',
             'height': 'mapData(connections, 1, 50, 25, 50)',
             'font-size': 8,
+            'min-zoomed-font-size': 8,
             'color': '#000'
         }
     },
