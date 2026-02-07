@@ -224,67 +224,77 @@ stylesheet = [
 # ----- Layout -----
 
 app.layout = html.Div([
-    # Header
+    # ===== Navbar =====
     html.Div([
-        html.H1("NetNeighbors: Common Crawl Graph Explorer"),
-        html.P("Interactive multi-hop domain discovery using the Common Crawl webgraph")
-    ], style={
-        'background': 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        'color': 'white',
-        'padding': '30px',
-        'margin-bottom': '20px',
-        'border-radius': '10px'
-    }),
-
-    html.Div([
-        # ===== Left Pane =====
+        html.Span("net_neighbor", className='nav-title'),
         html.Div([
-            # Search + Export row
+            # Export menu
             html.Div([
-                dcc.Input(
-                    id='domain-search',
-                    type='text',
-                    placeholder='Search domains...',
-                    style={
-                        'flex': 1,
-                        'padding': '8px 12px',
-                        'border': '1px solid #ddd',
-                        'border-radius': '5px',
-                        'font-size': '13px'
-                    }
-                ),
+                html.Span("Export", className='nav-menu-label'),
                 html.Div([
-                    html.Button(
-                        'Export \u25BC',
-                        id='export-toggle-btn',
-                        style={
-                            'padding': '8px 14px',
-                            'background': '#667eea',
-                            'color': 'white',
-                            'border': 'none',
-                            'border-radius': '5px',
-                            'cursor': 'pointer',
-                            'font-size': '13px',
-                            'white-space': 'nowrap'
-                        }
-                    ),
-                    html.Div([
-                        html.Div('Node List (.csv)', id={'type': 'export-btn', 'index': 'csv-nodes'},
-                                 className='export-option', n_clicks=0),
-                        html.Div('Edge List (.csv)', id={'type': 'export-btn', 'index': 'csv-edges'},
-                                 className='export-option', n_clicks=0),
-                        html.Div('Graph (.gexf)', id={'type': 'export-btn', 'index': 'gexf'},
-                                 className='export-option', n_clicks=0),
-                    ], id='export-dropdown', style={'display': 'none'})
-                ], className='export-wrapper')
-            ], style={
-                'display': 'flex',
-                'gap': '8px',
-                'margin-bottom': '12px',
-                'align-items': 'center'
-            }),
+                    html.Div('Node List (.csv)', id={'type': 'export-btn', 'index': 'csv-nodes'},
+                             className='nav-dropdown-item', n_clicks=0),
+                    html.Div('Edge List (.csv)', id={'type': 'export-btn', 'index': 'csv-edges'},
+                             className='nav-dropdown-item', n_clicks=0),
+                    html.Div('Graph (.gexf)', id={'type': 'export-btn', 'index': 'gexf'},
+                             className='nav-dropdown-item', n_clicks=0),
+                ], className='nav-dropdown')
+            ], className='nav-menu'),
 
-            # Domain list
+            # Resources menu
+            html.Div([
+                html.Span("Resources", className='nav-menu-label'),
+                html.Div([
+                    html.A(html.Div('cc-webgraph (GitHub)', className='nav-dropdown-item'),
+                           href='https://github.com/commoncrawl/cc-webgraph',
+                           target='_blank'),
+                    html.A(html.Div('NetNeighbors (GitHub)', className='nav-dropdown-item'),
+                           href='https://github.com/casos-icalp-cmu/NetNeighbors',
+                           target='_blank'),
+                    html.A(html.Div('Common Crawl Web Graph Paper', className='nav-dropdown-item'),
+                           href='https://doi.org/10.1145/3487553.3524241',
+                           target='_blank'),
+                ], className='nav-dropdown')
+            ], className='nav-menu'),
+
+            # Help menu
+            html.Div([
+                html.Span("Help", className='nav-menu-label'),
+                html.Div([
+                    html.Div([html.Strong("Add nodes"), " \u2014 type domains in the left pane textarea, click Add to Viewport"],
+                             className='nav-dropdown-item', style={'cursor': 'default'}),
+                    html.Div([html.Strong("Select nodes"), " \u2014 click a node, or box-select by dragging on the canvas"],
+                             className='nav-dropdown-item', style={'cursor': 'default'}),
+                    html.Div([html.Strong("Delete nodes"), " \u2014 select nodes, then press Delete or Backspace"],
+                             className='nav-dropdown-item', style={'cursor': 'default'}),
+                    html.Div([html.Strong("Discover"), " \u2014 select nodes, right-click \u2192 set options \u2192 Discover"],
+                             className='nav-dropdown-item', style={'cursor': 'default'}),
+                ], className='nav-dropdown', style={'min-width': '340px'})
+            ], className='nav-menu'),
+        ], style={'display': 'flex', 'height': '100%'})
+    ], id='navbar'),
+
+    # ===== Body =====
+    html.Div([
+        # Left Pane
+        html.Div([
+            # Search box
+            dcc.Input(
+                id='domain-search',
+                type='text',
+                placeholder='Search domains...',
+                style={
+                    'width': '100%',
+                    'padding': '8px 12px',
+                    'border': 'none',
+                    'border-bottom': '1px solid #ddd',
+                    'font-size': '13px',
+                    'box-sizing': 'border-box',
+                    'background': '#fff'
+                }
+            ),
+
+            # Domain list (fills available space)
             html.Div(id='domain-list-container', children=[
                 html.Div(
                     "No domains yet. Add some below.",
@@ -292,63 +302,61 @@ app.layout = html.Div([
                 )
             ]),
 
-            # New domains textarea
-            dcc.Textarea(
-                id='new-domains-input',
-                placeholder='Enter new domains...\none per line',
-                style={
-                    'width': '100%',
-                    'height': '100px',
-                    'padding': '10px',
-                    'border': '1px solid #ddd',
-                    'border-radius': '5px',
-                    'font-family': 'monospace',
-                    'font-size': '12px',
-                    'margin-top': '12px',
-                    'resize': 'vertical',
-                    'box-sizing': 'border-box'
-                }
-            ),
-
-            # Import + Add row
+            # Bottom section: textarea + buttons
             html.Div([
-                dcc.Upload(
-                    id='file-upload',
-                    children=html.Button('Import from File', style={
-                        'padding': '8px 14px',
-                        'background': '#95a5a6',
+                dcc.Textarea(
+                    id='new-domains-input',
+                    placeholder='Enter new domains...\none per line',
+                    style={
+                        'width': '100%',
+                        'height': '80px',
+                        'padding': '8px',
+                        'border': '1px solid #ddd',
+                        'border-radius': '4px',
+                        'font-family': 'monospace',
+                        'font-size': '12px',
+                        'resize': 'vertical',
+                        'box-sizing': 'border-box'
+                    }
+                ),
+                html.Div([
+                    dcc.Upload(
+                        id='file-upload',
+                        children=html.Button('Import from File', style={
+                            'padding': '6px 10px',
+                            'background': '#95a5a6',
+                            'color': 'white',
+                            'border': 'none',
+                            'border-radius': '4px',
+                            'cursor': 'pointer',
+                            'font-size': '12px'
+                        }),
+                        multiple=False
+                    ),
+                    html.Button('Add to Viewport', id='add-viewport-btn', n_clicks=0, style={
+                        'padding': '6px 10px',
+                        'background': '#4ecdc4',
                         'color': 'white',
                         'border': 'none',
-                        'border-radius': '5px',
+                        'border-radius': '4px',
                         'cursor': 'pointer',
-                        'font-size': '13px'
-                    }),
-                    multiple=False
-                ),
-                html.Button('Add to Viewport', id='add-viewport-btn', n_clicks=0, style={
-                    'padding': '8px 14px',
-                    'background': '#4ecdc4',
-                    'color': 'white',
-                    'border': 'none',
-                    'border-radius': '5px',
-                    'cursor': 'pointer',
-                    'font-size': '13px',
-                    'font-weight': 'bold'
+                        'font-size': '12px',
+                        'font-weight': 'bold'
+                    })
+                ], style={
+                    'display': 'flex',
+                    'gap': '6px',
+                    'margin-top': '6px',
+                    'justify-content': 'space-between'
                 })
             ], style={
-                'display': 'flex',
-                'gap': '8px',
-                'margin-top': '10px',
-                'justify-content': 'space-between'
+                'padding': '10px',
+                'flex-shrink': 0
             })
 
-        ], style={
-            'width': '300px',
-            'padding': '0 20px',
-            'flex-shrink': 0
-        }),
+        ], id='left-pane'),
 
-        # ===== Right Pane: graph + context menu =====
+        # Right Pane: graph + context menu
         html.Div([
             cyto.Cytoscape(
                 id='cytoscape-graph',
@@ -366,7 +374,7 @@ app.layout = html.Div([
                     'coolingFactor': 0.95,
                     'minTemp': 1.0
                 },
-                style={'width': '100%', 'height': '800px', 'background': '#f8f9fa', 'border-radius': '8px'},
+                style={'width': '100%', 'height': '100%', 'background': '#f8f9fa'},
                 elements=[],
                 stylesheet=stylesheet,
                 boxSelectionEnabled=True,
@@ -420,14 +428,14 @@ app.layout = html.Div([
             ], id='context-menu', style={'display': 'none'})
         ], id='graph-wrapper'),
 
-    ], style={'display': 'flex'}),
+    ], id='body-container'),
 
     # Hidden elements
     html.Button(id='delete-trigger-btn', style={'display': 'none'}, n_clicks=0),
     dcc.Store(id='focus-domain', data=None),
     dcc.Store(id='center-ack', data=None),
     dcc.Download(id='export-download'),
-])
+], id='root-container')
 
 
 # ----- Callbacks -----

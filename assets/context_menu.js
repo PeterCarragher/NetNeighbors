@@ -48,18 +48,4 @@ document.addEventListener('DOMContentLoaded', function() {
             if (btn) btn.click();
         }
     });
-
-    // --- Export dropdown toggle ---
-    document.addEventListener('click', function(e) {
-        var toggler = document.getElementById('export-toggle-btn');
-        var dropdown = document.getElementById('export-dropdown');
-        if (!toggler || !dropdown) return;
-
-        if (toggler.contains(e.target)) {
-            // Toggle
-            dropdown.style.display = dropdown.style.display === 'block' ? 'none' : 'block';
-        } else if (!dropdown.contains(e.target)) {
-            dropdown.style.display = 'none';
-        }
-    });
 });
