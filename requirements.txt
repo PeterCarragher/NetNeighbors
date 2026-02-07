@@ -1,7 +1,6 @@
-# NetNeighbors Gradio App Dependencies
-
-# Web UI
-gradio>=4.0.0
+# Web UI (Dash + Cytoscape network visualization)
+dash>=2.14.0
+dash-cytoscape>=1.0.0
 
 # Java bridge
 py4j>=0.10.9

@@ -1,0 +1,67 @@
+steps:
+  # Create Artifact Registry repo (idempotent)
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        gcloud artifacts repositories describe netneighbors \
+          --location=us-central1 --project=$PROJECT_ID 2>/dev/null || \
+        gcloud artifacts repositories create netneighbors \
+          --repository-format=docker \
+          --location=us-central1 \
+          --project=$PROJECT_ID
+
+  # Build container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/netneighbors/app:$COMMIT_SHA'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/netneighbors/app:latest'
+      - '.'
+
+  # Push to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '--all-tags', 'us-central1-docker.pkg.dev/$PROJECT_ID/netneighbors/app']
+
+  # Deploy to Cloud Run with GCS FUSE volume for webgraph data
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'netneighbors'
+      - '--image'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/netneighbors/app:$COMMIT_SHA'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--execution-environment'
+      - 'gen2'
+      - '--memory'
+      - '4Gi'
+      - '--cpu'
+      - '2'
+      - '--min-instances'
+      - '0'
+      - '--max-instances'
+      - '1'
+      - '--timeout'
+      - '300'
+      - '--startup-cpu-boost'
+      - '--set-env-vars'
+      - 'WEBGRAPH_DIR=/data/webgraph,WEBGRAPH_VERSION=cc-main-2024-feb-apr-may,CC_WEBGRAPH_JAR=/app/cc-webgraph.jar'
+      - '--add-volume=name=webgraph-data,type=cloud-storage,bucket=commoncrawl_webgraph'
+      - '--add-volume-mount=volume=webgraph-data,mount-path=/data/webgraph'
+      - '--allow-unauthenticated'
+
+images:
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/netneighbors/app:$COMMIT_SHA'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/netneighbors/app:latest'
+
+options:
+  machineType: 'E2_HIGHCPU_8'
+  logging: CLOUD_LOGGING_ONLY
