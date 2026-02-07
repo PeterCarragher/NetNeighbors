@@ -445,6 +445,7 @@ app.layout = html.Div([
     dcc.Store(id='focus-domain', data=None),
     dcc.Store(id='center-ack', data=None),
     dcc.Store(id='pending-elements', data=None),
+    dcc.Store(id='discover-done', data=0),
     dcc.ConfirmDialog(id='confirm-dialog', message=''),
     dcc.ConfirmDialog(id='validation-report', message=''),
     dcc.Download(id='export-download'),
@@ -660,18 +661,22 @@ NODE_WARNING_THRESHOLD = 150
     [Output('cytoscape-graph', 'elements', allow_duplicate=True),
      Output('pending-elements', 'data'),
      Output('confirm-dialog', 'displayed'),
-     Output('confirm-dialog', 'message')],
+     Output('confirm-dialog', 'message'),
+     Output('discover-done', 'data', allow_duplicate=True)],
     Input('discover-btn', 'n_clicks'),
     [State('cytoscape-graph', 'selectedNodeData'),
      State('ctx-direction-radio', 'value'),
      State('ctx-min-conn-slider', 'value'),
-     State('cytoscape-graph', 'elements')],
+     State('cytoscape-graph', 'elements'),
+     State('discover-done', 'data')],
     prevent_initial_call=True
 )
-def context_menu_discover(n_clicks, selected_nodes, direction, min_conn, current_elements):
+def context_menu_discover(n_clicks, selected_nodes, direction, min_conn,
+                          current_elements, done_counter):
     if not n_clicks or not selected_nodes:
         raise PreventUpdate
 
+    tick = (done_counter or 0) + 1
     seed_domains = [node['id'] for node in selected_nodes]
     new_nodes, new_edges = explorer.discover_neighbors(seed_domains, min_conn, direction)
 
@@ -684,11 +689,11 @@ def context_menu_discover(n_clicks, selected_nodes, direction, min_conn, current
     if len(unique_nodes) > NODE_WARNING_THRESHOLD:
         msg = (f"this will add {len(unique_nodes)} nodes to the viewport, "
                f"which may affect the visualizer's performance. continue?")
-        return elements, {'nodes': unique_nodes, 'edges': new_edges}, True, msg
+        return elements, {'nodes': unique_nodes, 'edges': new_edges}, True, msg, tick
 
     elements.extend(unique_nodes)
     elements.extend(new_edges)
-    return elements, None, False, ''
+    return elements, None, False, '', tick
 
 
 # CB10: Confirm large discovery
@@ -717,18 +722,32 @@ def confirm_large_discovery(submit_clicks, pending, current_elements):
     return elements
 
 
-# CB7: Hide context menu on Discover (clientside)
+# CB7: Hide context menu + set loading cursor on Discover click (clientside, instant)
 app.clientside_callback(
     """
     function(n_clicks) {
         if (!n_clicks) return null;
         var menu = document.getElementById('context-menu');
         if (menu) menu.style.display = 'none';
+        document.body.style.cursor = 'wait';
         return null;
     }
     """,
     Output('center-ack', 'data', allow_duplicate=True),
     Input('discover-btn', 'n_clicks'),
+    prevent_initial_call=True
+)
+
+# CB11: Reset cursor when discover finishes (clientside, fires after CB6 returns)
+app.clientside_callback(
+    """
+    function(done) {
+        document.body.style.cursor = '';
+        return null;
+    }
+    """,
+    Output('center-ack', 'data', allow_duplicate=True),
+    Input('discover-done', 'data'),
     prevent_initial_call=True
 )
 
