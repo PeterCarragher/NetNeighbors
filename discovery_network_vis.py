@@ -4,6 +4,7 @@ Full integration with Common Crawl webgraph discovery
 """
 
 import os
+import re
 import base64
 import io
 import dash
@@ -14,6 +15,13 @@ import json
 import xml.etree.ElementTree as ET
 
 from graph_bridge import GraphBridge
+
+# Regex for a well-formed domain: labels separated by dots, valid chars, proper TLD
+DOMAIN_RE = re.compile(
+    r'^(?!-)'                         # no leading hyphen
+    r'(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)'  # one or more labels
+    r'+[a-zA-Z]{2,}$'                # TLD at least 2 alpha chars
+)
 
 def reverse_domain(domain):
     """Reverse domain for Common Crawl format"""
@@ -265,6 +273,8 @@ app.layout = html.Div([
                              className='nav-dropdown-item', style={'cursor': 'default'}),
                     html.Div([html.Strong("select nodes"), " \u2014 click a node, or box-select by dragging on the canvas"],
                              className='nav-dropdown-item', style={'cursor': 'default'}),
+                    html.Div([html.Strong("find node"), " \u2014 click a domain in the left pane to highlight and center in viewport"],
+                             className='nav-dropdown-item', style={'cursor': 'default'}),
                     html.Div([html.Strong("delete nodes"), " \u2014 select nodes, then press delete or backspace"],
                              className='nav-dropdown-item', style={'cursor': 'default'}),
                     html.Div([html.Strong("discover"), " \u2014 select nodes, right-click \u2192 set options \u2192 discover"],
@@ -436,6 +446,7 @@ app.layout = html.Div([
     dcc.Store(id='center-ack', data=None),
     dcc.Store(id='pending-elements', data=None),
     dcc.ConfirmDialog(id='confirm-dialog', message=''),
+    dcc.ConfirmDialog(id='validation-report', message=''),
     dcc.Download(id='export-download'),
 ], id='root-container')
 
@@ -526,10 +537,12 @@ app.clientside_callback(
 )
 
 
-# CB4: Import File + Add to Viewport
+# CB4: Import File + Add to Viewport (with validation)
 @app.callback(
     [Output('cytoscape-graph', 'elements', allow_duplicate=True),
-     Output('new-domains-input', 'value')],
+     Output('new-domains-input', 'value'),
+     Output('validation-report', 'displayed'),
+     Output('validation-report', 'message')],
     [Input('file-upload', 'contents'),
      Input('add-viewport-btn', 'n_clicks')],
     [State('file-upload', 'filename'),
@@ -542,30 +555,48 @@ def import_and_add(file_contents, add_clicks, filename, textarea_value, current_
     if not ctx.triggered:
         raise PreventUpdate
 
+    no_report = (False, '')
     trigger = ctx.triggered[0]['prop_id'].split('.')[0]
 
     if trigger == 'file-upload' and file_contents:
         # Decode uploaded file (text)
-        content_type, content_string = file_contents.split(',')
+        _, content_string = file_contents.split(',')
         decoded = base64.b64decode(content_string).decode('utf-8')
         # Populate textarea with file contents (don't modify graph yet)
-        return current_elements or [], decoded
+        return current_elements or [], decoded, *no_report
 
     if trigger == 'add-viewport-btn':
         if not textarea_value or not textarea_value.strip():
             raise PreventUpdate
 
         # Parse domains from textarea
-        new_domains = [d.strip() for d in textarea_value.split('\n') if d.strip()]
-        if not new_domains:
+        raw_domains = [d.strip() for d in textarea_value.split('\n') if d.strip()]
+        if not raw_domains:
             raise PreventUpdate
 
+        total_input = len(raw_domains)
+
+        # Step 1: regex validation
+        well_formed = [d for d in raw_domains if DOMAIN_RE.match(d)]
+        malformed = [d for d in raw_domains if not DOMAIN_RE.match(d)]
+
+        # Step 2: validate against CommonCrawl data
+        if well_formed:
+            reversed_domains = [reverse_domain(d) for d in well_formed]
+            found_reversed, not_found_reversed = bridge.validate_seeds(reversed_domains)
+            # Map back to normal format
+            in_cc = [unreverse_domain(d) for d in found_reversed]
+        else:
+            in_cc = []
+
+        # Step 3: add only validated domains (skip duplicates already in graph)
         elements = list(current_elements) if current_elements else []
         existing_ids = {
             e['data']['id'] for e in elements if 'source' not in e['data']
         }
 
-        for domain in new_domains:
+        added = []
+        for domain in in_cc:
             if domain not in existing_ids:
                 elements.append({
                     'data': {
@@ -577,8 +608,23 @@ def import_and_add(file_contents, add_clicks, filename, textarea_value, current_
                     'classes': 'seed'
                 })
                 existing_ids.add(domain)
+                added.append(domain)
 
-        return elements, ''
+        # Build report if anything was filtered out
+        n_well_formed = len(well_formed)
+        n_in_cc = len(in_cc)
+        n_added = len(added)
+
+        if n_well_formed < total_input or n_in_cc < n_well_formed:
+            msg = (
+                f"of {total_input} input domain(s):\n"
+                f"  - {n_well_formed} well-formed\n"
+                f"  - {n_in_cc} found in commoncrawl data\n"
+                f"  - {n_added} imported to viewport"
+            )
+            return elements, '', True, msg
+
+        return elements, '', *no_report
 
     raise PreventUpdate
 
