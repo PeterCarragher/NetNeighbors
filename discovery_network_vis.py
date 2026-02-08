@@ -1,6 +1,6 @@
 """
 NetNeighbors Graph Explorer with Dash Cytoscape
-Full integration with Common Crawl webgraph discovery
+Full integration with Common Crawl webgraph discovery via pyccwebgraph
 """
 
 import os
@@ -14,7 +14,7 @@ import dash_cytoscape as cyto
 import json
 import xml.etree.ElementTree as ET
 
-from graph_bridge import GraphBridge
+from pyccwebgraph import CCWebgraph
 
 # Regex for a well-formed domain: labels separated by dots, valid chars, proper TLD
 DOMAIN_RE = re.compile(
@@ -23,72 +23,45 @@ DOMAIN_RE = re.compile(
     r'+[a-zA-Z]{2,}$'                # TLD at least 2 alpha chars
 )
 
-def reverse_domain(domain):
-    """Reverse domain for Common Crawl format"""
-    return '.'.join(reversed(domain.split('.')))
-
-
-def unreverse_domain(domain):
-    """Unreverse domain for display"""
-    return '.'.join(reversed(domain.split('.')))
-
 
 class GraphExplorer:
-    """Manages graph state and Common Crawl queries"""
+    """Manages graph state and Common Crawl queries via pyccwebgraph"""
 
-    def __init__(self, bridge=None):
-        self.bridge = bridge  # Your JVM bridge instance
+    def __init__(self, webgraph):
+        self.webgraph = webgraph
         self.hop_counter = 0
 
     def discover_neighbors(self, seed_domains, min_connections=5, direction='backlinks'):
         """
-        Query Common Crawl for neighbors of seed domains
+        Query Common Crawl for neighbors of seed domains.
 
         Args:
-            seed_domains: list of domain names (normal format)
+            seed_domains: list of domain names (normal format, e.g. "cnn.com")
             min_connections: minimum connection threshold
             direction: 'backlinks' or 'outlinks'
 
         Returns:
-            (nodes, edges): tuple of new graph elements
+            (nodes, edges): tuple of new Cytoscape elements
         """
-
-        # Convert to reversed format for query
-        seed_domains_reversed = [reverse_domain(d) for d in seed_domains]
-
-        # Query the bridge
-        results = self.bridge.discover(
-            seed_domains=seed_domains_reversed,
+        # pyccwebgraph handles domain reversal transparently
+        result = self.webgraph.discover(
+            seed_domains=seed_domains,
             min_connections=min_connections,
             direction=direction
         )
 
-        # Unreverse domain names from CommonCrawl format for display
-        for r in results:
-            r['domain'] = unreverse_domain(r['domain'])
-
-        # Build graph elements
-        nodes, edges = self._build_elements(seed_domains, results, direction)
-
+        nodes, edges = self._build_elements(seed_domains, result)
         return nodes, edges
 
-    def _build_elements(self, seed_domains, results, direction):
-        """Convert discovery results to Cytoscape elements"""
+    def _build_elements(self, _seed_domains, result):
+        """Convert DiscoveryResult to Cytoscape elements"""
         nodes = []
         edges = []
 
-        # Create discovered nodes
-        if results:
-            max_conn = max(r['connections'] for r in results)
-            min_conn = min(r['connections'] for r in results)
-            conn_range = max(max_conn - min_conn, 1)
-
-            for result in results:
-                domain = result['domain']
-                connections = result['connections']
-
-                # Normalize size (20-60 pixel range)
-                size = 20 + 40 * (connections - min_conn) / conn_range
+        if result.nodes:
+            for node_data in result.nodes:
+                domain = node_data['domain']
+                connections = node_data['connections']
 
                 nodes.append({
                     'data': {
@@ -101,43 +74,33 @@ class GraphExplorer:
                     'classes': 'discovered'
                 })
 
-                # Create edges based on direction
-                for seed in seed_domains:
-                    if direction == 'backlinks':
-                        # discovered -> seed
-                        edges.append({
-                            'data': {
-                                'source': domain,
-                                'target': seed
-                            }
-                        })
-                    else:  # outlinks
-                        # seed -> discovered
-                        edges.append({
-                            'data': {
-                                'source': seed,
-                                'target': domain
-                            }
-                        })
+            # Use actual edges from discovery result (only connected pairs)
+            for src, tgt in result.edges:
+                edges.append({
+                    'data': {
+                        'source': src,
+                        'target': tgt
+                    }
+                })
 
         self.hop_counter += 1
         return nodes, edges
 
 
-def get_bridge():
-    """Initialize GraphBridge from environment variables."""
+def get_webgraph():
+    """Initialize CCWebgraph from environment variables."""
     webgraph_dir = os.environ.get("WEBGRAPH_DIR", "/data/webgraph")
     version = os.environ.get("WEBGRAPH_VERSION", "cc-main-2024-feb-apr-may")
     jar_path = os.environ.get("CC_WEBGRAPH_JAR", None)
 
-    bridge = GraphBridge(webgraph_dir, version, jar_path)
-    bridge.load_graph()
-    return bridge
+    wg = CCWebgraph(webgraph_dir, version, jar_path)
+    wg.load_graph()
+    return wg
 
 
-# Initialize bridge and explorer at startup
-bridge = get_bridge()
-explorer = GraphExplorer(bridge=bridge)
+# Initialize webgraph and explorer at startup
+webgraph = get_webgraph()
+explorer = GraphExplorer(webgraph=webgraph)
 
 # Initialize Dash app
 app = dash.Dash(__name__, assets_folder='assets')
@@ -460,7 +423,7 @@ app.layout = html.Div([
 
 # ----- Callbacks -----
 
-# CB1: Domain List (elements + search → domain-list children)
+# CB1: Domain List (elements + search -> domain-list children)
 @app.callback(
     Output('domain-list-container', 'children'),
     [Input('cytoscape-graph', 'elements'),
@@ -501,7 +464,7 @@ def update_domain_list(elements, search_text):
     ]
 
 
-# CB2: Domain Click → Focus Store
+# CB2: Domain Click -> Focus Store
 @app.callback(
     Output('focus-domain', 'data'),
     Input({'type': 'domain-item', 'index': ALL}, 'n_clicks'),
@@ -585,14 +548,10 @@ def import_and_add(file_contents, add_clicks, filename, textarea_value, current_
 
         # Step 1: regex validation
         well_formed = [d for d in raw_domains if DOMAIN_RE.match(d)]
-        malformed = [d for d in raw_domains if not DOMAIN_RE.match(d)]
 
-        # Step 2: validate against CommonCrawl data
+        # Step 2: validate against CommonCrawl data (normal format - pyccwebgraph handles reversal)
         if well_formed:
-            reversed_domains = [reverse_domain(d) for d in well_formed]
-            found_reversed, not_found_reversed = bridge.validate_seeds(reversed_domains)
-            # Map back to normal format
-            in_cc = [unreverse_domain(d) for d in found_reversed]
+            in_cc, _ = webgraph.validate_seeds(well_formed)
         else:
             in_cc = []
 

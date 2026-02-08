@@ -2,8 +2,8 @@
 dash>=2.14.0
 dash-cytoscape>=1.0.0
 
-# Java bridge
-py4j>=0.10.9
+# Webgraph interface (handles Java bridge, graph loading, discovery)
+pyccwebgraph>=0.1.0
 
 # Data processing
 pandas>=2.0.0

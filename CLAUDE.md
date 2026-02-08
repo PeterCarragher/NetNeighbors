@@ -8,21 +8,24 @@ NetNeighbors is a domain discovery tool that finds related domains using link to
 
 ## Architecture
 
-The system has two layers: a **Java discovery engine** for high-performance graph traversal and a **Python orchestration layer** for UI and data processing.
+The system has two layers: **pyccwebgraph** (a standalone Python package for webgraph access) and a **Dash Cytoscape web UI** for interactive exploration.
+
+### pyccwebgraph (separate project — `pip install pyccwebgraph`)
+Standalone Python package providing the `CCWebgraph` class:
+- `ccwebgraph.py` — Main API: `CCWebgraph.setup()`, `discover_backlinks/outlinks`, `domain_to_id`, `get_predecessors/successors`. Uses py4j to bridge Python and a persistent JVM. Handles CommonCrawl's reversed domain notation transparently.
+- `converters.py` — `DiscoveryResult` class with `.networkx()`, `.networkit()`, `.igraph()`, `.to_dataframe()` converters.
+- `setup_utils.py` — Java version checking, JAR auto-detection, data validation.
+- `download.py` — Webgraph file download with progress bars, offset building.
+
+### Dash App
+- `discovery_network_vis.py` — Interactive graph explorer using Dash Cytoscape. Imports `CCWebgraph` from pyccwebgraph. Port 8050 (configurable via `PORT` env var).
 
 ### Java Core (`src/`)
-- `DiscoveryTool.java` — Memory-optimized two-pass discovery algorithm. Pass 1 scans gzipped vertices to map seed names to graph IDs; the graph loads via memory-mapped I/O (not heap); Pass 2 resolves result IDs back to domain names. Uses fastutil primitive collections to minimize GC pressure.
+- `DiscoveryTool.java` — Memory-optimized two-pass CLI discovery tool. Not required by the Dash app (which uses py4j bridge instead), but useful for batch processing.
 - `GraphLookup.java` — Helper for graph ID/label mapping.
-- Compiled class files go to `bin/`.
-
-### Python Frontends
-- `app.py` — Gradio web UI (port 7860, configurable via `PORT` env var).
-- `graph_bridge.py` — py4j bridge to a persistent JVM. Loads graph once, then queries are near-instant. Used by `app.py`.
-- `webgraph_discovery.py` — Subprocess-based alternative that spawns a new Java process per query. No persistent JVM needed.
-- `utils.py` — Helpers for setup, webgraph download, and storage management.
 
 ### Two Graph Strategy
-- Forward graph (`domain-edges.txt.gz`): for outlinks discovery (who do seeds link to).
+- Forward graph (`.graph`): for outlinks discovery (who do seeds link to).
 - Transpose graph (`-t.graph`): for backlinks discovery (who links to seeds).
 - Both loaded via memory-mapped I/O, keeping heap usage low.
 
@@ -33,22 +36,16 @@ The system has two layers: a **Java discovery engine** for high-performance grap
 ./scripts/setup.sh              # Auto-detect environment (Colab or local)
 ./scripts/setup.sh --local      # Local dev (skips apt-get)
 ```
-This installs Java 17, Maven, Python deps, clones/builds cc-webgraph, and compiles DiscoveryTool.
+This installs Java 17, Maven, Python deps, clones/builds cc-webgraph.
 
-### Verify Installation
+### Install pyccwebgraph
 ```bash
-./scripts/verify.sh
+pip install pyccwebgraph
 ```
 
-### Compile Java (after modifying `src/`)
+### Run Dash App
 ```bash
-javac -cp /path/to/cc-webgraph-0.1-SNAPSHOT-jar-with-dependencies.jar -d bin/ src/DiscoveryTool.java
-```
-The cc-webgraph JAR is at `cc-webgraph/target/cc-webgraph-0.1-SNAPSHOT-jar-with-dependencies.jar` (or `$CC_WEBGRAPH_JAR` in Docker).
-
-### Run Gradio App
-```bash
-python app.py
+python discovery_network_vis.py
 ```
 
 ### Run Java Discovery Directly
@@ -62,7 +59,7 @@ java -Xmx24g -cp cc-webgraph.jar:bin DiscoveryTool \
 ### Docker
 ```bash
 docker build -t netneighbors .
-docker run -p 7860:7860 -v /path/to/webgraph:/data/webgraph netneighbors
+docker run -p 8050:8050 -v /path/to/webgraph:/data/webgraph netneighbors
 ```
 
 ### Cloud Run Deployment
@@ -77,15 +74,15 @@ docker run -p 7860:7860 -v /path/to/webgraph:/data/webgraph netneighbors
 | `WEBGRAPH_DIR` | `/data/webgraph` | Path to webgraph data directory |
 | `WEBGRAPH_VERSION` | `cc-main-2024-feb-apr-may` | CommonCrawl crawl version identifier |
 | `CC_WEBGRAPH_JAR` | (set by setup) | Path to cc-webgraph uber-jar |
-| `PORT` | `7860` | Gradio server port |
+| `PORT` | `8050` | Dash server port |
 
 ## Dependencies
 
 **Java**: JDK 17+, Maven, cc-webgraph (cloned and built from github.com/commoncrawl/cc-webgraph)
 
-**Python** (`requirements.txt`): gradio, py4j, pandas, tqdm, psutil, ipywidgets
+**Python** (`requirements.txt`): dash, dash-cytoscape, pyccwebgraph (py4j, tqdm, psutil), pandas
 
-**Data**: CommonCrawl webgraph files (~23GB) — downloaded via `utils.download_webgraph()` or gcsfuse mount.
+**Data**: CommonCrawl webgraph files (~23GB) — downloaded via `pyccwebgraph.download.download_webgraph()` or `CCWebgraph.setup(auto_download=True)`.
 
 ## Memory Requirements
 
