@@ -1,7 +1,9 @@
 # Interactive CommonCrawl Webgraph Demo
 [![Live Demo](https://img.shields.io/badge/Live-Demo-blue?style=for-the-badge)](https://netneighbors-504093998111.us-central1.run.app/)
 
-Discover related domains using link webgraph topology analysis. Given a list of seed domains, discovers other domains that are connected via backlinks or outlinks in the CommonCrawl web graph.
+Discover related domains using link webgraph topology analysis. 
+
+Given a list of seed domains, discovers other domains that are connected via backlinks or outlinks in the CommonCrawl web graph.
 
 ## Setup Instructions
 
@@ -9,7 +11,9 @@ Discover related domains using link webgraph topology analysis. Given a list of 
 pip install pyccwebgraph
 ```
 
-If you are interested in general network analysis, checkout the [pyccwebgraph package](https://pypi.org/project/pyccwebgraph/). There is also a [separate repository for a colab notebook](https://github.com/PeterCarragher/NetNeighborsColab) that you can use to self host an instance of this demo.
+If you are interested in general network analysis, checkout the [pyccwebgraph package](https://pypi.org/project/pyccwebgraph/). 
+
+There is also a [separate repository for a colab notebook](https://github.com/PeterCarragher/NetNeighborsColab) that you can use to self host an instance of this demo.
 
 ## Discovery Interface
 ```bash
