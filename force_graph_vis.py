@@ -719,8 +719,9 @@ def load_example_graph(confirm_clicks, example_type, was_displayed):
         with open(pickle_path, 'rb') as f:
             G = pickle.load(f)
 
-        # Calculate in-degree for each node
+        # Calculate in-degree and out-degree for fallback
         in_degree = dict(G.in_degree())
+        out_degree = dict(G.out_degree())
 
         # Convert NetworkX to nodes/links
         nodes = []
@@ -728,12 +729,29 @@ def load_example_graph(confirm_clicks, example_type, was_displayed):
 
         for node, data in G.nodes(data=True):
             node_type = data.get('node_type', 'seed')
+
+            # Use existing connections attribute if available
+            # For discovered nodes, prefer out_degree (how many seeds they connect to)
+            # For seed nodes, prefer in_degree (how many discovered nodes link to them)
+            if 'total_connections' in data:
+                # link_spam nodes have this attribute
+                connections = data['total_connections']
+            elif 'connections' in data:
+                # iranian_news discovered nodes have this
+                connections = data['connections']
+            elif data.get('is_seed'):
+                # Seed nodes: count how many discovered nodes link to them
+                connections = in_degree.get(node, 0)
+            else:
+                # Discovered nodes: count how many seeds they link to
+                connections = out_degree.get(node, 0)
+
             nodes.append({
                 'id': node,
                 'label': node,
                 'type': node_type,
                 'hop': 0 if data.get('is_seed') else 1,
-                'connections': in_degree.get(node, 0),
+                'connections': connections,
             })
 
         for src, tgt, data in G.edges(data=True):

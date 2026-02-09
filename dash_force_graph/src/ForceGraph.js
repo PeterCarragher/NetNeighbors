@@ -27,6 +27,7 @@ const ForceGraph = (props) => {
 
     const graphRef = useRef();
     const containerRef = useRef();
+    const overlayRef = useRef();
     const [graphData, setGraphData] = useState({ nodes: [], links: [] });
     const [selectedSet, setSelectedSet] = useState(new Set(selectedNodes || []));
     const [dimensions, setDimensions] = useState({ width: width || 800, height: height || 600 });
@@ -35,6 +36,23 @@ const ForceGraph = (props) => {
     const [isBoxSelecting, setIsBoxSelecting] = useState(false);
     const [boxStart, setBoxStart] = useState(null);
     const [boxEnd, setBoxEnd] = useState(null);
+    const [shiftHeld, setShiftHeld] = useState(false);
+
+    // Track shift key globally
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if (e.key === 'Shift') setShiftHeld(true);
+        };
+        const handleKeyUp = (e) => {
+            if (e.key === 'Shift') setShiftHeld(false);
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        window.addEventListener('keyup', handleKeyUp);
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown);
+            window.removeEventListener('keyup', handleKeyUp);
+        };
+    }, []);
 
     // Update dimensions from props or container
     useEffect(() => {
@@ -54,6 +72,15 @@ const ForceGraph = (props) => {
         const nodesCopy = (nodes || []).map(n => ({ ...n }));
         const linksCopy = (links || []).map(l => ({ ...l }));
         setGraphData({ nodes: nodesCopy, links: linksCopy });
+
+        // Debug: log connection values
+        if (nodesCopy.length > 0) {
+            const connValues = nodesCopy.map(n => n.connections || 0);
+            const maxConn = Math.max(...connValues);
+            const minConn = Math.min(...connValues);
+            const withConn = connValues.filter(c => c > 0).length;
+            console.log(`Nodes: ${nodesCopy.length}, with connections: ${withConn}, min: ${minConn}, max: ${maxConn}`);
+        }
     }, [nodes, links]);
 
     // Sync selection from props
@@ -113,13 +140,14 @@ const ForceGraph = (props) => {
         }
     }, [selectedSet, setProps]);
 
-    // Background click - clear selection
+    // Background click - clear selection (only if not box selecting)
     const handleBackgroundClick = useCallback((event) => {
+        if (isBoxSelecting) return;
         setSelectedSet(new Set());
         if (setProps) {
             setProps({ selectedNodes: [] });
         }
-    }, [setProps]);
+    }, [setProps, isBoxSelecting]);
 
     // Right-click handler for context menu
     const handleNodeRightClick = useCallback((node, event) => {
@@ -153,13 +181,20 @@ const ForceGraph = (props) => {
         return '#4ecdc4';
     }, [selectedSet]);
 
-    // Node size function
+    // Node size function - scale by in-degree (connections)
+    // nodeVal sets the node's volume; force-graph uses sqrt(nodeVal) for radius
+    // So we square our desired size to get the visual we want
     const getNodeSize = useCallback((node) => {
-        const baseSize = node.connections ? Math.sqrt(node.connections) + 3 : 5;
+        const connections = node.connections || 0;
+        // Base size 3, scale up with connections using sqrt for better distribution
+        // Then square it because nodeVal represents area
+        const baseSize = 3;
+        const scaledSize = baseSize + Math.sqrt(connections) * 2;
+        const size = scaledSize * scaledSize; // Square it for nodeVal
         if (selectedSet.has(node.id)) {
-            return baseSize * 1.3; // Larger when selected
+            return size * 2; // Larger when selected
         }
-        return baseSize;
+        return size;
     }, [selectedSet]);
 
     // Link color - highlight links connected to selected nodes
@@ -189,41 +224,49 @@ const ForceGraph = (props) => {
         return node.label || node.id;
     }, []);
 
-    // Box selection handlers
-    const handleMouseDown = useCallback((event) => {
-        if (event.shiftKey && graphRef.current) {
-            const rect = containerRef.current.getBoundingClientRect();
-            const x = event.clientX - rect.left;
-            const y = event.clientY - rect.top;
-            setIsBoxSelecting(true);
-            setBoxStart({ x, y });
-            setBoxEnd({ x, y });
-            event.preventDefault();
-        }
-    }, []);
+    // Box selection handlers on the overlay
+    const handleOverlayMouseDown = useCallback((event) => {
+        if (!shiftHeld) return;
+        if (!containerRef.current) return;
+        const rect = containerRef.current.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+        console.log('Box select start:', { x, y, shiftHeld });
+        setIsBoxSelecting(true);
+        setBoxStart({ x, y });
+        setBoxEnd({ x, y });
+        event.preventDefault();
+        event.stopPropagation();
+    }, [shiftHeld]);
 
-    const handleMouseMove = useCallback((event) => {
-        if (isBoxSelecting && containerRef.current) {
-            const rect = containerRef.current.getBoundingClientRect();
-            const x = event.clientX - rect.left;
-            const y = event.clientY - rect.top;
-            setBoxEnd({ x, y });
-        }
+    const handleOverlayMouseMove = useCallback((event) => {
+        if (!isBoxSelecting || !containerRef.current) return;
+        const rect = containerRef.current.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+        setBoxEnd({ x, y });
     }, [isBoxSelecting]);
 
-    const handleMouseUp = useCallback((event) => {
-        if (isBoxSelecting && boxStart && boxEnd && graphRef.current) {
-            // Convert screen coords to graph coords
+    const handleOverlayMouseUp = useCallback((event) => {
+        console.log('Box select mouseup:', { isBoxSelecting, boxStart, boxEnd, hasGraph: !!graphRef.current });
+        if (!isBoxSelecting || !boxStart || !boxEnd || !graphRef.current) {
+            setIsBoxSelecting(false);
+            return;
+        }
+
+        // Get the selection box bounds in screen space
+        const minX = Math.min(boxStart.x, boxEnd.x);
+        const maxX = Math.max(boxStart.x, boxEnd.x);
+        const minY = Math.min(boxStart.y, boxEnd.y);
+        const maxY = Math.max(boxStart.y, boxEnd.y);
+
+        console.log('Box bounds:', { minX, maxX, minY, maxY, size: (maxX - minX) * (maxY - minY) });
+
+        // Only select if box is big enough (avoid accidental clicks)
+        if (maxX - minX > 5 && maxY - minY > 5) {
             const graph = graphRef.current;
-
-            // Get the selection box bounds in screen space
-            const minX = Math.min(boxStart.x, boxEnd.x);
-            const maxX = Math.max(boxStart.x, boxEnd.x);
-            const minY = Math.min(boxStart.y, boxEnd.y);
-            const maxY = Math.max(boxStart.y, boxEnd.y);
-
-            // Find nodes within the box
             const selected = [];
+
             graphData.nodes.forEach(node => {
                 if (node.x !== undefined && node.y !== undefined) {
                     // Convert graph coords to screen coords
@@ -235,8 +278,10 @@ const ForceGraph = (props) => {
                 }
             });
 
+            console.log('Box selected nodes:', selected.length, selected.slice(0, 5));
+
             if (selected.length > 0) {
-                const newSet = event.ctrlKey || event.metaKey
+                const newSet = event?.ctrlKey || event?.metaKey
                     ? new Set([...selectedSet, ...selected])
                     : new Set(selected);
                 setSelectedSet(newSet);
@@ -245,6 +290,7 @@ const ForceGraph = (props) => {
                 }
             }
         }
+
         setIsBoxSelecting(false);
         setBoxStart(null);
         setBoxEnd(null);
@@ -277,13 +323,29 @@ const ForceGraph = (props) => {
                 minHeight: '300px',
                 position: 'relative'
             }}
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
         >
-            {/* Selection box overlay */}
+            {/* Invisible overlay for box selection when shift is held */}
+            <div
+                ref={overlayRef}
+                style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    zIndex: shiftHeld ? 100 : -1,
+                    cursor: shiftHeld ? 'crosshair' : 'default',
+                    pointerEvents: shiftHeld ? 'auto' : 'none',
+                }}
+                onMouseDown={handleOverlayMouseDown}
+                onMouseMove={handleOverlayMouseMove}
+                onMouseUp={handleOverlayMouseUp}
+                onMouseLeave={handleOverlayMouseUp}
+            />
+            {/* Selection box */}
             <div style={getSelectionBoxStyle()} />
+            {/* Wrap ForceGraph2D to ensure proper z-stacking with overlay */}
+            <div style={{ position: 'relative', zIndex: 1, width: '100%', height: '100%' }}>
             <ForceGraph2D
                 ref={graphRef}
                 graphData={graphData}
@@ -307,14 +369,16 @@ const ForceGraph = (props) => {
                 nodeCanvasObject={(node, ctx, globalScale) => {
                     // Draw selection ring
                     if (node && selectedSet.has(node.id)) {
+                        const size = getNodeSize(node);
                         ctx.beginPath();
-                        ctx.arc(node.x, node.y, getNodeSize(node) + 2, 0, 2 * Math.PI);
+                        ctx.arc(node.x, node.y, Math.sqrt(size) * 2 + 2, 0, 2 * Math.PI);
                         ctx.strokeStyle = '#ffd93d';
                         ctx.lineWidth = 2 / globalScale;
                         ctx.stroke();
                     }
                 }}
             />
+            </div>
         </div>
     );
 };
