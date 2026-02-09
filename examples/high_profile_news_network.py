@@ -6,6 +6,8 @@ between them. Unlike other examples, this does not discover
 external sites - it only maps connections within the given set.
 """
 
+import os
+import pickle
 from typing import TYPE_CHECKING, Optional
 
 from example_loader import (
@@ -82,4 +84,9 @@ def build_network(
 
 if __name__ == "__main__":
     G = build_network()
+    # dump to pickle file
+    
+    os.makedirs("examples/pickle", exist_ok=True)
+    with open("examples/pickle/high_profile_news_network.pkl", "wb") as f:
+        pickle.dump(G, f)
     print_graph_summary(G)

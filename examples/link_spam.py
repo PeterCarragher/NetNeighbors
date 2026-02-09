@@ -12,6 +12,8 @@ Algorithm:
 4. Return a graph with casinos, misinfo sites, and shared backlinkers
 """
 
+import os
+import pickle
 from typing import TYPE_CHECKING, Optional, Set
 
 from example_loader import (
@@ -170,6 +172,9 @@ def build_network(
 
 if __name__ == "__main__":
     G = build_network()
+    os.makedirs("examples/pickle", exist_ok=True)
+    with open("examples/pickle/link_spam.pkl", "wb") as f:
+        pickle.dump(G, f)
     print_graph_summary(G)
 
     # Additional stats for this specific analysis

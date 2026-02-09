@@ -8,6 +8,7 @@ import re
 import sys
 import base64
 import io
+import pickle
 import dash
 from dash import html, dcc, Input, Output, State, callback_context, ALL
 from dash.exceptions import PreventUpdate
@@ -20,6 +21,9 @@ from pyccwebgraph import CCWebgraph
 
 # Add examples directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent / "examples"))
+
+# Path to precomputed example graphs
+PICKLE_DIR = Path(__file__).parent / "examples" / "pickle"
 
 # Regex for a well-formed domain
 DOMAIN_RE = re.compile(
@@ -52,9 +56,15 @@ class GraphExplorer:
         links = []
 
         if result.nodes:
+            # Count in-degree for each node from the edges
+            in_degree = {}
+            for src, tgt in result.edges:
+                in_degree[tgt] = in_degree.get(tgt, 0) + 1
+
             for node_data in result.nodes:
                 domain = node_data['domain']
-                connections = node_data['connections']
+                # Use in-degree as connections (how many edges point to this node)
+                connections = in_degree.get(domain, 0)
 
                 nodes.append({
                     'id': domain,
@@ -103,9 +113,9 @@ app.layout = html.Div([
                 html.Span("examples", className='nav-menu-label'),
                 html.Div([
                     html.Div([
-                        html.Span('Iranian News Network', id={'type': 'example-btn', 'index': 'iranian'},
+                        html.Span('Link Spam Network', id={'type': 'example-btn', 'index': 'link-spam'},
                                   className='example-name', n_clicks=0),
-                        html.A('paper', href='https://link.springer.com/chapter/10.1007/978-3-031-72241-7_15',
+                        html.A('paper', href='https://dl.acm.org/doi/10.1145/3670410',
                                target='_blank', className='example-paper-link')
                     ], className='nav-dropdown-item example-item'),
                     html.Div([
@@ -115,9 +125,9 @@ app.layout = html.Div([
                                target='_blank', className='example-paper-link')
                     ], className='nav-dropdown-item example-item'),
                     html.Div([
-                        html.Span('Link Spam Network', id={'type': 'example-btn', 'index': 'link-spam'},
+                        html.Span('Iranian News Network', id={'type': 'example-btn', 'index': 'iranian'},
                                   className='example-name', n_clicks=0),
-                        html.A('paper', href='https://dl.acm.org/doi/10.1145/3670410',
+                        html.A('paper', href='https://link.springer.com/chapter/10.1007/978-3-031-72241-7_15',
                                target='_blank', className='example-paper-link')
                     ], className='nav-dropdown-item example-item'),
                 ], className='nav-dropdown')
@@ -258,7 +268,7 @@ app.layout = html.Div([
             # Control panel (replaces context menu)
             html.Div([
                 html.Div([
-                    html.Label("direction:", style={'font-weight': 'bold', 'font-size': '13px'}),
+                    html.Label("direction:", style={'fontWeight': 'bold', 'fontSize': '13px', 'marginRight': '8px'}),
                     dcc.RadioItems(
                         id='direction-radio',
                         options=[
@@ -267,9 +277,9 @@ app.layout = html.Div([
                         ],
                         value='backlinks',
                         inline=True,
-                        style={'font-size': '13px'}
+                        style={'fontSize': '13px', 'display': 'inline-flex', 'gap': '10px'}
                     )
-                ], style={'marginRight': '20px'}),
+                ], style={'marginRight': '20px', 'display': 'flex', 'alignItems': 'center'}),
                 html.Div([
                     html.Label("min connections:", style={'font-weight': 'bold', 'font-size': '13px'}),
                     dcc.Input(
@@ -691,18 +701,26 @@ def load_example_graph(confirm_clicks, example_type, was_displayed):
     if not example_type:
         raise PreventUpdate
 
+    # Map example type to pickle file
+    pickle_files = {
+        'iranian': 'iranian_news_network.pkl',
+        'high-profile': 'high_profile_news_network.pkl',
+        'link-spam': 'link_spam.pkl',
+    }
+
+    pickle_file = pickle_files.get(example_type)
+    if not pickle_file:
+        raise PreventUpdate
+
+    pickle_path = PICKLE_DIR / pickle_file
+
     try:
-        if example_type == 'iranian':
-            from iranian_news_network import build_network
-            G = build_network(wg=webgraph)
-        elif example_type == 'high-profile':
-            from high_profile_news_network import build_network
-            G = build_network(wg=webgraph)
-        elif example_type == 'link-spam':
-            from link_spam import build_network
-            G = build_network(wg=webgraph)
-        else:
-            raise PreventUpdate
+        # Load precomputed graph from pickle
+        with open(pickle_path, 'rb') as f:
+            G = pickle.load(f)
+
+        # Calculate in-degree for each node
+        in_degree = dict(G.in_degree())
 
         # Convert NetworkX to nodes/links
         nodes = []
@@ -715,7 +733,7 @@ def load_example_graph(confirm_clicks, example_type, was_displayed):
                 'label': node,
                 'type': node_type,
                 'hop': 0 if data.get('is_seed') else 1,
-                'connections': data.get('connections', data.get('total_connections', 0)),
+                'connections': in_degree.get(node, 0),
             })
 
         for src, tgt, data in G.edges(data=True):
@@ -727,7 +745,7 @@ def load_example_graph(confirm_clicks, example_type, was_displayed):
         return nodes, links
 
     except Exception as e:
-        print(f"Error loading example: {e}")
+        print(f"Error loading example from {pickle_path}: {e}")
         raise PreventUpdate
 
 

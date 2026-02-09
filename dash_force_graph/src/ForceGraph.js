@@ -31,6 +31,11 @@ const ForceGraph = (props) => {
     const [selectedSet, setSelectedSet] = useState(new Set(selectedNodes || []));
     const [dimensions, setDimensions] = useState({ width: width || 800, height: height || 600 });
 
+    // Box selection state
+    const [isBoxSelecting, setIsBoxSelecting] = useState(false);
+    const [boxStart, setBoxStart] = useState(null);
+    const [boxEnd, setBoxEnd] = useState(null);
+
     // Update dimensions from props or container
     useEffect(() => {
         if (width && height) {
@@ -184,6 +189,83 @@ const ForceGraph = (props) => {
         return node.label || node.id;
     }, []);
 
+    // Box selection handlers
+    const handleMouseDown = useCallback((event) => {
+        if (event.shiftKey && graphRef.current) {
+            const rect = containerRef.current.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+            setIsBoxSelecting(true);
+            setBoxStart({ x, y });
+            setBoxEnd({ x, y });
+            event.preventDefault();
+        }
+    }, []);
+
+    const handleMouseMove = useCallback((event) => {
+        if (isBoxSelecting && containerRef.current) {
+            const rect = containerRef.current.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+            setBoxEnd({ x, y });
+        }
+    }, [isBoxSelecting]);
+
+    const handleMouseUp = useCallback((event) => {
+        if (isBoxSelecting && boxStart && boxEnd && graphRef.current) {
+            // Convert screen coords to graph coords
+            const graph = graphRef.current;
+
+            // Get the selection box bounds in screen space
+            const minX = Math.min(boxStart.x, boxEnd.x);
+            const maxX = Math.max(boxStart.x, boxEnd.x);
+            const minY = Math.min(boxStart.y, boxEnd.y);
+            const maxY = Math.max(boxStart.y, boxEnd.y);
+
+            // Find nodes within the box
+            const selected = [];
+            graphData.nodes.forEach(node => {
+                if (node.x !== undefined && node.y !== undefined) {
+                    // Convert graph coords to screen coords
+                    const screenCoords = graph.graph2ScreenCoords(node.x, node.y);
+                    if (screenCoords.x >= minX && screenCoords.x <= maxX &&
+                        screenCoords.y >= minY && screenCoords.y <= maxY) {
+                        selected.push(node.id);
+                    }
+                }
+            });
+
+            if (selected.length > 0) {
+                const newSet = event.ctrlKey || event.metaKey
+                    ? new Set([...selectedSet, ...selected])
+                    : new Set(selected);
+                setSelectedSet(newSet);
+                if (setProps) {
+                    setProps({ selectedNodes: Array.from(newSet) });
+                }
+            }
+        }
+        setIsBoxSelecting(false);
+        setBoxStart(null);
+        setBoxEnd(null);
+    }, [isBoxSelecting, boxStart, boxEnd, graphData.nodes, selectedSet, setProps]);
+
+    // Get selection box style
+    const getSelectionBoxStyle = () => {
+        if (!isBoxSelecting || !boxStart || !boxEnd) return { display: 'none' };
+        return {
+            position: 'absolute',
+            left: Math.min(boxStart.x, boxEnd.x),
+            top: Math.min(boxStart.y, boxEnd.y),
+            width: Math.abs(boxEnd.x - boxStart.x),
+            height: Math.abs(boxEnd.y - boxStart.y),
+            border: '2px dashed #667eea',
+            backgroundColor: 'rgba(102, 126, 234, 0.1)',
+            pointerEvents: 'none',
+            zIndex: 1000,
+        };
+    };
+
     return (
         <div
             id={id}
@@ -192,9 +274,16 @@ const ForceGraph = (props) => {
                 width: '100%',
                 height: '100%',
                 minWidth: '400px',
-                minHeight: '300px'
+                minHeight: '300px',
+                position: 'relative'
             }}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
         >
+            {/* Selection box overlay */}
+            <div style={getSelectionBoxStyle()} />
             <ForceGraph2D
                 ref={graphRef}
                 graphData={graphData}

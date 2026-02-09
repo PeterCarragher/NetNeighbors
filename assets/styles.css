@@ -244,9 +244,21 @@ html, body {
     margin-right: 5px;
 }
 
+#control-panel button {
+    font-family: 'Space Mono', monospace;
+}
+
 #graph-container {
     display: flex;
+    flex: 1;
     overflow: hidden;
+    min-height: 0;
+}
+
+/* Ensure graph wrapper fills available space */
+#graph-wrapper {
+    display: flex;
+    flex-direction: column;
 }
 
 #graph-container canvas {

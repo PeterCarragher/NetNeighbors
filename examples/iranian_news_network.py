@@ -6,6 +6,8 @@ discovers external sites that backlink to at least 10 of these domains,
 and returns a combined network graph.
 """
 
+import os
+import pickle
 from typing import TYPE_CHECKING, Optional
 
 from example_loader import (
@@ -106,4 +108,7 @@ def build_network(
 
 if __name__ == "__main__":
     G = build_network()
+    os.makedirs("examples/pickle", exist_ok=True)
+    with open("examples/pickle/iranian_news_network.pkl", "wb") as f:
+        pickle.dump(G, f)
     print_graph_summary(G)
