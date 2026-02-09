@@ -200,3 +200,66 @@ html, body {
     flex: 1;
     overflow: hidden;
 }
+
+/* Example menu items */
+.example-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+}
+
+.example-name {
+    flex: 1;
+    cursor: pointer;
+}
+
+.example-name:hover {
+    color: #667eea;
+}
+
+.example-paper-link {
+    font-size: 11px;
+    color: #667eea;
+    text-decoration: none;
+    padding: 2px 6px;
+    border: 1px solid #667eea;
+    border-radius: 3px;
+    opacity: 0.8;
+    transition: opacity 0.15s, background 0.15s;
+}
+
+.example-paper-link:hover {
+    opacity: 1;
+    background: #667eea;
+    color: white;
+}
+
+/* Loading overlay */
+#loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    font-size: 16px;
+    font-weight: 500;
+}
+
+.loading-spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid #e0e0e0;
+    border-top-color: #667eea;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}

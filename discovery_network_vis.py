@@ -5,6 +5,7 @@ Full integration with Common Crawl webgraph discovery via pyccwebgraph
 
 import os
 import re
+import sys
 import base64
 import io
 import dash
@@ -13,8 +14,12 @@ from dash.exceptions import PreventUpdate
 import dash_cytoscape as cyto
 import json
 import xml.etree.ElementTree as ET
+from pathlib import Path
 
 from pyccwebgraph import CCWebgraph
+
+# Add examples directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent / "examples"))
 
 # Regex for a well-formed domain: labels separated by dots, valid chars, proper TLD
 DOMAIN_RE = re.compile(
@@ -203,6 +208,31 @@ app.layout = html.Div([
     html.Div([
         html.Span("net_neighbor", className='nav-title'),
         html.Div([
+            # Examples menu
+            html.Div([
+                html.Span("examples", className='nav-menu-label'),
+                html.Div([
+                    html.Div([
+                        html.Span('Iranian News Network', id={'type': 'example-btn', 'index': 'iranian'},
+                                  className='example-name', n_clicks=0),
+                        html.A('paper', href='https://link.springer.com/chapter/10.1007/978-3-031-72241-7_15',
+                               target='_blank', className='example-paper-link')
+                    ], className='nav-dropdown-item example-item'),
+                    html.Div([
+                        html.Span('High-Profile News', id={'type': 'example-btn', 'index': 'high-profile'},
+                                  className='example-name', n_clicks=0),
+                        html.A('paper', href='https://ojs.aaai.org/index.php/ICWSM/article/view/31309',
+                               target='_blank', className='example-paper-link')
+                    ], className='nav-dropdown-item example-item'),
+                    html.Div([
+                        html.Span('Link Spam Network', id={'type': 'example-btn', 'index': 'link-spam'},
+                                  className='example-name', n_clicks=0),
+                        html.A('paper', href='https://dl.acm.org/doi/10.1145/3670410',
+                               target='_blank', className='example-paper-link')
+                    ], className='nav-dropdown-item example-item'),
+                ], className='nav-dropdown')
+            ], className='nav-menu'),
+
             # Export menu
             html.Div([
                 html.Span("export", className='nav-menu-label'),
@@ -415,9 +445,19 @@ app.layout = html.Div([
     dcc.Store(id='center-ack', data=None),
     dcc.Store(id='pending-elements', data=None),
     dcc.Store(id='discover-done', data=0),
+    dcc.Store(id='example-loading', data=None),
     dcc.ConfirmDialog(id='confirm-dialog', message=''),
     dcc.ConfirmDialog(id='validation-report', message=''),
+    dcc.ConfirmDialog(id='example-confirm', message=''),
     dcc.Download(id='export-download'),
+
+    # Loading overlay for examples
+    html.Div([
+        html.Div([
+            html.Div(className='loading-spinner'),
+            html.Div("Loading example graph...", style={'margin-top': '15px', 'color': '#667eea'})
+        ], style={'text-align': 'center'})
+    ], id='loading-overlay', style={'display': 'none'}),
 ], id='root-container')
 
 
@@ -809,6 +849,171 @@ def export_graph(n_clicks_list, elements):
         return dict(content=buf.getvalue(), filename='graph.gexf')
 
     raise PreventUpdate
+
+
+def networkx_to_cytoscape(G):
+    """Convert a NetworkX graph to Cytoscape elements."""
+    elements = []
+
+    for node, data in G.nodes(data=True):
+        node_type = data.get('node_type', 'seed')
+        is_seed = data.get('is_seed', False)
+
+        # Map node_type to CSS classes and hop values
+        if node_type == 'seed':
+            css_class = 'seed'
+            hop = 0
+        elif node_type == 'casino':
+            css_class = 'seed'  # casino seeds
+            hop = 0
+        elif node_type == 'misinfo':
+            css_class = 'seed'  # misinfo seeds
+            hop = 0
+        elif node_type == 'link_spam':
+            css_class = 'discovered'
+            hop = 1
+        elif node_type == 'discovered':
+            css_class = 'discovered'
+            hop = 1
+        else:
+            css_class = 'discovered' if not is_seed else 'seed'
+            hop = 0 if is_seed else 1
+
+        elements.append({
+            'data': {
+                'id': node,
+                'label': node,
+                'type': node_type,
+                'hop': hop,
+                'connections': data.get('connections', data.get('total_connections', 0)),
+            },
+            'classes': css_class
+        })
+
+    for src, tgt, data in G.edges(data=True):
+        elements.append({
+            'data': {
+                'source': src,
+                'target': tgt,
+                'edge_type': data.get('edge_type', 'external')
+            }
+        })
+
+    return elements
+
+
+# CB10: Example Graph Loading - Confirmation
+@app.callback(
+    [Output('example-confirm', 'displayed'),
+     Output('example-confirm', 'message'),
+     Output('example-loading', 'data')],
+    Input({'type': 'example-btn', 'index': ALL}, 'n_clicks'),
+    State('cytoscape-graph', 'elements'),
+    prevent_initial_call=True
+)
+def confirm_example_load(n_clicks_list, current_elements):
+    ctx = callback_context
+    if not ctx.triggered or not any(n_clicks_list):
+        raise PreventUpdate
+
+    prop_id = ctx.triggered[0]['prop_id']
+    clicked_id = json.loads(prop_id.rsplit('.', 1)[0])
+    example_type = clicked_id['index']
+
+    example_names = {
+        'iranian': 'Iranian News Network',
+        'high-profile': 'High-Profile News Network',
+        'link-spam': 'Link Spam Network'
+    }
+
+    name = example_names.get(example_type, example_type)
+
+    # Check if there's existing data
+    has_data = current_elements and len([e for e in current_elements if 'source' not in e['data']]) > 0
+
+    if has_data:
+        msg = f"Loading '{name}' will replace the current graph. Continue?"
+        return True, msg, example_type
+
+    # No existing data, skip confirmation
+    return False, '', example_type
+
+
+# CB11: Example Graph Loading - Execute
+@app.callback(
+    Output('cytoscape-graph', 'elements', allow_duplicate=True),
+    [Input('example-confirm', 'submit_n_clicks'),
+     Input('example-loading', 'data')],
+    State('example-confirm', 'displayed'),
+    prevent_initial_call=True
+)
+def load_example_graph(confirm_clicks, example_type, was_displayed):
+    ctx = callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+
+    trigger = ctx.triggered[0]['prop_id'].split('.')[0]
+
+    # If confirmation dialog was shown, only proceed on confirm click
+    if was_displayed and trigger != 'example-confirm':
+        raise PreventUpdate
+
+    if not example_type:
+        raise PreventUpdate
+
+    # Import and build the example graph using the already-loaded webgraph
+    try:
+        if example_type == 'iranian':
+            from iranian_news_network import build_network
+            G = build_network(wg=webgraph)
+        elif example_type == 'high-profile':
+            from high_profile_news_network import build_network
+            G = build_network(wg=webgraph)
+        elif example_type == 'link-spam':
+            from link_spam import build_network
+            G = build_network(wg=webgraph)
+        else:
+            raise PreventUpdate
+
+        # Convert NetworkX graph to Cytoscape elements
+        elements = networkx_to_cytoscape(G)
+        return elements
+
+    except Exception as e:
+        print(f"Error loading example: {e}")
+        raise PreventUpdate
+
+
+# Clientside callback to show/hide loading overlay
+app.clientside_callback(
+    """
+    function(exampleData) {
+        var overlay = document.getElementById('loading-overlay');
+        if (overlay && exampleData) {
+            overlay.style.display = 'flex';
+        }
+        return null;
+    }
+    """,
+    Output('center-ack', 'data', allow_duplicate=True),
+    Input('example-loading', 'data'),
+    prevent_initial_call=True
+)
+
+app.clientside_callback(
+    """
+    function(elements) {
+        var overlay = document.getElementById('loading-overlay');
+        if (overlay) {
+            overlay.style.display = 'none';
+        }
+        return null;
+    }
+    """,
+    Output('center-ack', 'data', allow_duplicate=True),
+    Input('cytoscape-graph', 'elements'),
+    prevent_initial_call=True
+)
 
 
 if __name__ == '__main__':
