@@ -1,0 +1,4 @@
+include dash_force_graph/bundle.js
+include dash_force_graph/metadata.json
+include dash_force_graph/*.py
+recursive-include dash_force_graph *.js *.json
