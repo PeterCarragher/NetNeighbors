@@ -408,9 +408,10 @@ def update_domain_list(nodes, search_text):
     ]
 
 
-# Domain click -> center on node
+# Domain click -> center on node and select it
 @app.callback(
-    Output('force-graph', 'centerAt'),
+    [Output('force-graph', 'centerAt'),
+     Output('force-graph', 'selectedNodes', allow_duplicate=True)],
     Input({'type': 'domain-item', 'index': ALL}, 'n_clicks'),
     prevent_initial_call=True
 )
@@ -420,7 +421,8 @@ def domain_click_to_center(n_clicks_list):
         raise PreventUpdate
     prop_id = ctx.triggered[0]['prop_id']
     clicked_id = json.loads(prop_id.rsplit('.', 1)[0])
-    return clicked_id['index']
+    domain = clicked_id['index']
+    return domain, [domain]
 
 
 # Selection count display

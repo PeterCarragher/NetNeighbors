@@ -10,8 +10,9 @@
   "author": "NetNeighbors",
   "license": "MIT",
   "dependencies": {
-    "react-force-graph-2d": "^1.25.0",
-    "ramda": "^0.29.0"
+    "d3-force": "^3.0.0",
+    "ramda": "^0.29.0",
+    "react-force-graph-2d": "^1.25.0"
   },
   "devDependencies": {
     "@babel/core": "^7.24.0",

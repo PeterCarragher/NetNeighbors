@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
+import * as d3 from 'd3-force';
 
 /**
  * ForceGraph - A Dash component wrapping force-graph-2d for high-performance
@@ -106,6 +107,26 @@ const ForceGraph = (props) => {
         }
     }, [zoomLevel]);
 
+    // Configure force simulation with stronger repulsion
+    // Replace the charge force entirely with a new one
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            if (graphRef.current) {
+                const fg = graphRef.current;
+                // Replace charge force with stronger repulsion
+                fg.d3Force('charge', d3.forceManyBody().strength(-800));
+                // Replace link force with longer distance
+                fg.d3Force('link', d3.forceLink().id(d => d.id).distance(150));
+                // Add collision force to prevent overlap
+                fg.d3Force('collision', d3.forceCollide().radius(20));
+                console.log('Configured forces: charge=-800, link=150, collision=20');
+                // Reheat simulation to apply changes
+                fg.d3ReheatSimulation();
+            }
+        }, 200);
+        return () => clearTimeout(timer);
+    }, [graphData]);
+
     // Node click handler - defensive about event being undefined
     const handleNodeClick = useCallback((node, event) => {
         if (!node) return;
@@ -184,18 +205,15 @@ const ForceGraph = (props) => {
     // Node size function - scale by in-degree (connections)
     // nodeVal sets the node's volume; force-graph uses sqrt(nodeVal) for radius
     // So we square our desired size to get the visual we want
+    // NOTE: Don't include selectedSet - selection is shown via ring, not size change
     const getNodeSize = useCallback((node) => {
         const connections = node.connections || 0;
-        // Base size 3, scale up with connections using sqrt for better distribution
-        // Then square it because nodeVal represents area
-        const baseSize = 3;
-        const scaledSize = baseSize + Math.sqrt(connections) * 2;
+        // Base size 10, scale up with connections
+        const baseSize = 10;
+        const scaledSize = baseSize + 40 * (connections / nodes.length);
         const size = scaledSize * scaledSize; // Square it for nodeVal
-        if (selectedSet.has(node.id)) {
-            return size * 2; // Larger when selected
-        }
         return size;
-    }, [selectedSet]);
+    }, [nodes.length]);
 
     // Link color - highlight links connected to selected nodes
     const getLinkColor = useCallback((link) => {
@@ -365,6 +383,8 @@ const ForceGraph = (props) => {
                 enablePanInteraction={enablePan !== false}
                 enableNodeDrag={enableNodeDrag !== false}
                 cooldownTicks={cooldownTicks || 100}
+                d3AlphaDecay={0.01}
+                d3VelocityDecay={0.3}
                 nodeCanvasObjectMode={() => 'after'}
                 nodeCanvasObject={(node, ctx, globalScale) => {
                     // Draw selection ring
