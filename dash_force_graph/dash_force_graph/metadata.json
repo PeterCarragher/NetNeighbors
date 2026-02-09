@@ -1,0 +1,111 @@
+{
+  "src/ForceGraph.js": {
+    "description": "A high-performance graph visualization component using force-graph.",
+    "displayName": "ForceGraph",
+    "methods": [],
+    "props": {
+      "id": {
+        "description": "The ID of this component",
+        "type": {"name": "string"},
+        "required": false
+      },
+      "nodes": {
+        "description": "List of node objects. Each node should have at least 'id'. Optional: 'label', 'color', 'type', 'connections'.",
+        "type": {"name": "array"},
+        "required": false,
+        "defaultValue": {"value": "[]", "computed": false}
+      },
+      "links": {
+        "description": "List of link objects. Each link needs 'source' and 'target' (node IDs).",
+        "type": {"name": "array"},
+        "required": false,
+        "defaultValue": {"value": "[]", "computed": false}
+      },
+      "selectedNodes": {
+        "description": "List of currently selected node IDs.",
+        "type": {"name": "array"},
+        "required": false,
+        "defaultValue": {"value": "[]", "computed": false}
+      },
+      "width": {
+        "description": "Width of the graph container in pixels.",
+        "type": {"name": "number"},
+        "required": false
+      },
+      "height": {
+        "description": "Height of the graph container in pixels.",
+        "type": {"name": "number"},
+        "required": false
+      },
+      "nodeColor": {
+        "description": "Default color for nodes.",
+        "type": {"name": "string"},
+        "required": false
+      },
+      "nodeSize": {
+        "description": "Default size for nodes.",
+        "type": {"name": "number"},
+        "required": false
+      },
+      "linkColor": {
+        "description": "Default color for links.",
+        "type": {"name": "string"},
+        "required": false
+      },
+      "linkWidth": {
+        "description": "Default width for links.",
+        "type": {"name": "number"},
+        "required": false
+      },
+      "enableZoom": {
+        "description": "Enable zoom interaction.",
+        "type": {"name": "bool"},
+        "required": false,
+        "defaultValue": {"value": "true", "computed": false}
+      },
+      "enablePan": {
+        "description": "Enable pan interaction.",
+        "type": {"name": "bool"},
+        "required": false,
+        "defaultValue": {"value": "true", "computed": false}
+      },
+      "enableNodeDrag": {
+        "description": "Enable node dragging.",
+        "type": {"name": "bool"},
+        "required": false,
+        "defaultValue": {"value": "true", "computed": false}
+      },
+      "cooldownTicks": {
+        "description": "Simulation ticks before stopping.",
+        "type": {"name": "number"},
+        "required": false,
+        "defaultValue": {"value": "100", "computed": false}
+      },
+      "centerAt": {
+        "description": "Node ID to center the view on.",
+        "type": {"name": "string"},
+        "required": false
+      },
+      "zoomLevel": {
+        "description": "Zoom level to apply.",
+        "type": {"name": "number"},
+        "required": false
+      },
+      "rightClickedNode": {
+        "description": "ID of the last right-clicked node (read-only).",
+        "type": {"name": "string"},
+        "required": false
+      },
+      "rightClickPosition": {
+        "description": "Position {x, y} of the last right-click (read-only).",
+        "type": {"name": "object"},
+        "required": false
+      },
+      "setProps": {
+        "description": "Dash callback to update props.",
+        "type": {"name": "func"},
+        "required": false
+      }
+    }
+  }
+}

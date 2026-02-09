@@ -235,6 +235,24 @@ html, body {
     color: white;
 }
 
+/* Control panel for force graph version */
+#control-panel {
+    flex-shrink: 0;
+}
+
+#control-panel label {
+    margin-right: 5px;
+}
+
+#graph-container {
+    display: flex;
+    overflow: hidden;
+}
+
+#graph-container canvas {
+    outline: none;
+}
+
 /* Loading overlay */
 #loading-overlay {
     position: fixed;
