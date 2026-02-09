@@ -1,5 +1,5 @@
 # Interactive CommonCrawl Webgraph Demo
-[![Live Demo](https://img.shields.io/badge/Live-Demo-blue?style=for-the-badge)](https://netneighbors-504093998111.us-central1.run.app/)
+[![Live Demo](https://img.shields.io/badge/Live-Demo-blue?style=for-the-badge)](https://netneighbor.petercarragher.com/)
 
 Discover related domains using link webgraph topology analysis. 
 
