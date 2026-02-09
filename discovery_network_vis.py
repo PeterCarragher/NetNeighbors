@@ -103,7 +103,7 @@ webgraph = get_webgraph()
 explorer = GraphExplorer(webgraph=webgraph)
 
 # Initialize Dash app
-app = dash.Dash(__name__, assets_folder='assets')
+app = dash.Dash(__name__, assets_folder='assets', title='net_neighbor')
 
 # Cytoscape stylesheet
 stylesheet = [
