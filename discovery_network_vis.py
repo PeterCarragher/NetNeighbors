@@ -447,6 +447,7 @@ app.layout = html.Div([
     dcc.Store(id='pending-elements', data=None),
     dcc.Store(id='discover-done', data=0),
     dcc.Store(id='example-loading', data=None),
+    dcc.Store(id='pending-example', data=None),
     dcc.ConfirmDialog(id='confirm-dialog', message=''),
     dcc.ConfirmDialog(id='validation-report', message=''),
     dcc.ConfirmDialog(id='example-confirm', message=''),
@@ -903,82 +904,83 @@ def networkx_to_cytoscape(G):
     return elements
 
 
-# CB10: Example Graph Loading - Confirmation
+EXAMPLE_MAP = {
+    '/iranian-news-network': 'iranian-news-network',
+    '/high-profile-news-network': 'high-profile-news-network',
+    '/link-spam-network': 'link-spam-network'
+}
+EXAMPLE_NAMES = {
+    'iranian-news-network': 'Iranian News Network',
+    'high-profile-news-network': 'High-Profile News Network',
+    'link-spam-network': 'Link Spam Network'
+}
+
+
+# Example buttons update URL (URL is single source of truth)
 @app.callback(
-    [Output('example-confirm', 'displayed'),
-     Output('example-confirm', 'message'),
-     Output('example-loading', 'data', allow_duplicate=True)],
+    Output('url', 'pathname'),
     Input({'type': 'example-btn', 'index': ALL}, 'n_clicks'),
-    State('cytoscape-graph', 'elements'),
     prevent_initial_call=True
 )
-def confirm_example_load(n_clicks_list, current_elements):
+def example_btn_to_url(n_clicks_list):
     ctx = callback_context
     if not ctx.triggered or not any(n_clicks_list):
         raise PreventUpdate
-
     prop_id = ctx.triggered[0]['prop_id']
     clicked_id = json.loads(prop_id.rsplit('.', 1)[0])
-    example_type = clicked_id['index']
-    
-    example_names = {
-        'iranian-news-network': 'Iranian News Network',
-        'high-profile-news-network': 'High-Profile News Network',
-        'link-spam-network': 'Link Spam Network'
-    }
-
-    name = example_names.get(example_type, example_type)
-
-    # Check if there's existing data
-    has_data = current_elements and len([e for e in current_elements if 'source' not in e['data']]) > 0
-
-    if has_data:
-        msg = f"Loading '{name}' will replace the current graph. Continue?"
-        return True, msg, example_type
-
-    # No existing data, skip confirmation
-    return False, '', example_type
+    return f'/{clicked_id["index"]}'
 
 
-# CB10b: Load example from URL path (e.g. /link-spam)
+# URL change triggers example loading (with confirmation if data exists)
 @app.callback(
-    Output('example-loading', 'data', allow_duplicate=True),
+    [Output('example-confirm', 'displayed'),
+     Output('example-confirm', 'message'),
+     Output('pending-example', 'data'),
+     Output('example-loading', 'data', allow_duplicate=True)],
     Input('url', 'pathname'),
+    State('cytoscape-graph', 'elements'),
     prevent_initial_call=False
 )
-def load_from_url(pathname):
+def url_to_example(pathname, current_elements):
     if not pathname or pathname == '/':
         raise PreventUpdate
-    example_map = {'/iranian-news-network': 'iranian-news-network', '/high-profile-news-network': 'high-profile-news-network', '/link-spam-network': 'link-spam-network'}
-    example = example_map.get(pathname)
-    if example:
-        return example
-    raise PreventUpdate
-
-
-# CB11: Example Graph Loading - Execute
-@app.callback(
-    Output('cytoscape-graph', 'elements', allow_duplicate=True),
-    [Input('example-confirm', 'submit_n_clicks'),
-     Input('example-loading', 'data')],
-    State('example-confirm', 'displayed'),
-    prevent_initial_call=True
-)
-def load_example_graph(confirm_clicks, example_type, was_displayed):
-    ctx = callback_context
-    if not ctx.triggered:
-        raise PreventUpdate
-
-    trigger = ctx.triggered[0]['prop_id'].split('.')[0]
-
-    # If confirmation dialog was shown, only proceed on confirm click
-    if was_displayed and trigger != 'example-confirm':
-        raise PreventUpdate
-
+    example_type = EXAMPLE_MAP.get(pathname)
     if not example_type:
         raise PreventUpdate
 
-    # Import and build the example graph using the already-loaded webgraph
+    name = EXAMPLE_NAMES.get(example_type, example_type)
+    has_data = current_elements and any('source' not in e['data'] for e in current_elements)
+
+    if has_data:
+        # Show confirmation, store pending example, don't load yet
+        return True, f"Loading '{name}' will replace the current graph. Continue?", example_type, dash.no_update
+    # No existing data, load directly
+    return False, '', None, example_type
+
+
+# Confirmation triggers loading from pending example
+@app.callback(
+    Output('example-loading', 'data', allow_duplicate=True),
+    Input('example-confirm', 'submit_n_clicks'),
+    State('pending-example', 'data'),
+    prevent_initial_call=True
+)
+def confirm_example_load(submit_clicks, pending):
+    if submit_clicks and pending:
+        return pending
+    raise PreventUpdate
+
+
+# Load example graph from example-loading store
+@app.callback(
+    Output('cytoscape-graph', 'elements', allow_duplicate=True),
+    Input('example-loading', 'data'),
+    prevent_initial_call=True
+)
+def load_example_graph(example_type):
+    if not example_type:
+        raise PreventUpdate
+
     try:
         if example_type == 'iranian-news-network':
             from iranian_news_network import build_network
@@ -991,11 +993,7 @@ def load_example_graph(confirm_clicks, example_type, was_displayed):
             G = build_network(wg=webgraph)
         else:
             raise PreventUpdate
-
-        # Convert NetworkX graph to Cytoscape elements
-        elements = networkx_to_cytoscape(G)
-        return elements
-
+        return networkx_to_cytoscape(G)
     except Exception as e:
         print(f"Error loading example: {e}")
         raise PreventUpdate
