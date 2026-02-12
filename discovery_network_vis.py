@@ -213,19 +213,19 @@ app.layout = html.Div([
                 html.Span("examples", className='nav-menu-label'),
                 html.Div([
                     html.Div([
-                        html.Span('Iranian News Network', id={'type': 'example-btn', 'index': 'iranian'},
+                        html.Span('Iranian News Network', id={'type': 'example-btn', 'index': 'iranian-news-network'},
                                   className='example-name', n_clicks=0),
                         html.A('paper', href='https://link.springer.com/chapter/10.1007/978-3-031-72241-7_15',
                                target='_blank', className='example-paper-link')
                     ], className='nav-dropdown-item example-item'),
                     html.Div([
-                        html.Span('High-Profile News', id={'type': 'example-btn', 'index': 'high-profile'},
+                        html.Span('High-Profile News', id={'type': 'example-btn', 'index': 'high-profile-news-network'},
                                   className='example-name', n_clicks=0),
                         html.A('paper', href='https://ojs.aaai.org/index.php/ICWSM/article/view/31309',
                                target='_blank', className='example-paper-link')
                     ], className='nav-dropdown-item example-item'),
                     html.Div([
-                        html.Span('Link Spam Network', id={'type': 'example-btn', 'index': 'link-spam'},
+                        html.Span('Link Spam Network', id={'type': 'example-btn', 'index': 'link-spam-network'},
                                   className='example-name', n_clicks=0),
                         html.A('paper', href='https://dl.acm.org/doi/10.1145/3670410',
                                target='_blank', className='example-paper-link')
@@ -983,10 +983,10 @@ def load_example_graph(confirm_clicks, example_type, was_displayed):
         if example_type == 'iranian-news-network':
             from iranian_news_network import build_network
             G = build_network(wg=webgraph)
-        elif example_type == 'high-profile':
+        elif example_type == 'high-profile-news-network':
             from high_profile_news_network import build_network
             G = build_network(wg=webgraph)
-        elif example_type == 'link-spam':
+        elif example_type == 'link-spam-network':
             from link_spam import build_network
             G = build_network(wg=webgraph)
         else:
