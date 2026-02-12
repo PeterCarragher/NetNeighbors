@@ -114,12 +114,12 @@ const ForceGraph = (props) => {
             if (graphRef.current) {
                 const fg = graphRef.current;
                 // Replace charge force with stronger repulsion
-                fg.d3Force('charge', d3.forceManyBody().strength(-800));
+                fg.d3Force('charge', d3.forceManyBody().strength(-200));
                 // Replace link force with longer distance
-                fg.d3Force('link', d3.forceLink().id(d => d.id).distance(150));
+                fg.d3Force('link', d3.forceLink().id(d => d.id).distance(100));
                 // Add collision force to prevent overlap
-                fg.d3Force('collision', d3.forceCollide().radius(20));
-                console.log('Configured forces: charge=-800, link=150, collision=20');
+                fg.d3Force('collision', d3.forceCollide().radius(40));
+                console.log('Configured forces: charge=-200, link=100, collision=40');
                 // Reheat simulation to apply changes
                 fg.d3ReheatSimulation();
             }

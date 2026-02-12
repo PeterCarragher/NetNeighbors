@@ -440,6 +440,7 @@ app.layout = html.Div([
     ], id='body-container'),
 
     # Hidden elements
+    dcc.Location(id='url', refresh=False),
     html.Button(id='delete-trigger-btn', style={'display': 'none'}, n_clicks=0),
     dcc.Store(id='focus-domain', data=None),
     dcc.Store(id='center-ack', data=None),
@@ -906,7 +907,7 @@ def networkx_to_cytoscape(G):
 @app.callback(
     [Output('example-confirm', 'displayed'),
      Output('example-confirm', 'message'),
-     Output('example-loading', 'data')],
+     Output('example-loading', 'data', allow_duplicate=True)],
     Input({'type': 'example-btn', 'index': ALL}, 'n_clicks'),
     State('cytoscape-graph', 'elements'),
     prevent_initial_call=True
@@ -919,11 +920,11 @@ def confirm_example_load(n_clicks_list, current_elements):
     prop_id = ctx.triggered[0]['prop_id']
     clicked_id = json.loads(prop_id.rsplit('.', 1)[0])
     example_type = clicked_id['index']
-
+    
     example_names = {
-        'iranian': 'Iranian News Network',
-        'high-profile': 'High-Profile News Network',
-        'link-spam': 'Link Spam Network'
+        'iranian-news-network': 'Iranian News Network',
+        'high-profile-news-network': 'High-Profile News Network',
+        'link-spam-network': 'Link Spam Network'
     }
 
     name = example_names.get(example_type, example_type)
@@ -937,6 +938,22 @@ def confirm_example_load(n_clicks_list, current_elements):
 
     # No existing data, skip confirmation
     return False, '', example_type
+
+
+# CB10b: Load example from URL path (e.g. /link-spam)
+@app.callback(
+    Output('example-loading', 'data', allow_duplicate=True),
+    Input('url', 'pathname'),
+    prevent_initial_call=False
+)
+def load_from_url(pathname):
+    if not pathname or pathname == '/':
+        raise PreventUpdate
+    example_map = {'/iranian-news-network': 'iranian-news-network', '/high-profile-news-network': 'high-profile-news-network', '/link-spam-network': 'link-spam-network'}
+    example = example_map.get(pathname)
+    if example:
+        return example
+    raise PreventUpdate
 
 
 # CB11: Example Graph Loading - Execute
@@ -963,7 +980,7 @@ def load_example_graph(confirm_clicks, example_type, was_displayed):
 
     # Import and build the example graph using the already-loaded webgraph
     try:
-        if example_type == 'iranian':
+        if example_type == 'iranian-news-network':
             from iranian_news_network import build_network
             G = build_network(wg=webgraph)
         elif example_type == 'high-profile':
