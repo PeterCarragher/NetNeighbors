@@ -15,8 +15,6 @@ const ForceGraph = (props) => {
         width,
         height,
         nodeColor,
-        linkColor,
-        linkWidth,
         enableZoom,
         enablePan,
         enableNodeDrag,
@@ -107,23 +105,18 @@ const ForceGraph = (props) => {
         }
     }, [zoomLevel]);
 
-    // Configure force simulation with stronger repulsion
-    // Replace the charge force entirely with a new one
+    // Configure force simulation - keep it simple like the medium example
+    // Avoid collision force (O(n²) complexity)
     useEffect(() => {
         const timer = setTimeout(() => {
             if (graphRef.current) {
                 const fg = graphRef.current;
-                // Replace charge force with stronger repulsion
-                fg.d3Force('charge', d3.forceManyBody().strength(-200));
-                // Replace link force with longer distance
-                fg.d3Force('link', d3.forceLink().id(d => d.id).distance(100));
-                // Add collision force to prevent overlap
-                fg.d3Force('collision', d3.forceCollide().radius(40));
-                console.log('Configured forces: charge=-200, link=100, collision=40');
+                // Simple charge force - library default is -30, we use slightly stronger
+                fg.d3Force('charge', d3.forceManyBody().strength(-50));
                 // Reheat simulation to apply changes
                 fg.d3ReheatSimulation();
             }
-        }, 200);
+        }, 100);
         return () => clearTimeout(timer);
     }, [graphData]);
 
@@ -202,40 +195,6 @@ const ForceGraph = (props) => {
         return '#4ecdc4';
     }, [selectedSet]);
 
-    // Node size function - scale by in-degree (connections)
-    // nodeVal sets the node's volume; force-graph uses sqrt(nodeVal) for radius
-    // So we square our desired size to get the visual we want
-    // NOTE: Don't include selectedSet - selection is shown via ring, not size change
-    const getNodeSize = useCallback((node) => {
-        const connections = node.connections || 0;
-        // Base size 10, scale up with connections
-        const baseSize = 10;
-        const scaledSize = baseSize + 40 * (connections / nodes.length);
-        const size = scaledSize * scaledSize; // Square it for nodeVal
-        return size;
-    }, [nodes.length]);
-
-    // Link color - highlight links connected to selected nodes
-    const getLinkColor = useCallback((link) => {
-        const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
-        const targetId = typeof link.target === 'object' ? link.target.id : link.target;
-
-        if (selectedSet.has(sourceId) || selectedSet.has(targetId)) {
-            return 'rgba(255, 217, 61, 0.8)'; // Highlight color
-        }
-        return linkColor || 'rgba(150, 150, 150, 0.3)';
-    }, [selectedSet, linkColor]);
-
-    // Link width
-    const getLinkWidth = useCallback((link) => {
-        const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
-        const targetId = typeof link.target === 'object' ? link.target.id : link.target;
-
-        if (selectedSet.has(sourceId) || selectedSet.has(targetId)) {
-            return 2;
-        }
-        return linkWidth || 0.5;
-    }, [selectedSet, linkWidth]);
 
     // Node label
     const getNodeLabel = useCallback((node) => {
@@ -370,12 +329,10 @@ const ForceGraph = (props) => {
                 width={dimensions.width}
                 height={dimensions.height}
                 nodeColor={getNodeColor}
-                nodeVal={getNodeSize}
+                nodeRelSize={6}
                 nodeLabel={getNodeLabel}
-                linkColor={getLinkColor}
-                linkWidth={getLinkWidth}
-                linkDirectionalArrowLength={3}
-                linkDirectionalArrowRelPos={1}
+                linkColor={() => 'rgba(150, 150, 150, 0.2)'}
+                linkWidth={0.5}
                 onNodeClick={handleNodeClick}
                 onBackgroundClick={handleBackgroundClick}
                 onNodeRightClick={handleNodeRightClick}
@@ -383,20 +340,6 @@ const ForceGraph = (props) => {
                 enablePanInteraction={enablePan !== false}
                 enableNodeDrag={enableNodeDrag !== false}
                 cooldownTicks={cooldownTicks || 100}
-                d3AlphaDecay={0.01}
-                d3VelocityDecay={0.3}
-                nodeCanvasObjectMode={() => 'after'}
-                nodeCanvasObject={(node, ctx, globalScale) => {
-                    // Draw selection ring
-                    if (node && selectedSet.has(node.id)) {
-                        const size = getNodeSize(node);
-                        ctx.beginPath();
-                        ctx.arc(node.x, node.y, Math.sqrt(size) * 2 + 2, 0, 2 * Math.PI);
-                        ctx.strokeStyle = '#ffd93d';
-                        ctx.lineWidth = 2 / globalScale;
-                        ctx.stroke();
-                    }
-                }}
             />
             </div>
         </div>
