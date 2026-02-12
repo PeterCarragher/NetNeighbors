@@ -100,7 +100,19 @@ webgraph = get_webgraph()
 explorer = GraphExplorer(webgraph=webgraph)
 
 # Initialize Dash app
-app = dash.Dash(__name__, assets_folder='assets', title='NetNeighbors')
+app = dash.Dash(__name__, assets_folder='assets', title='NetNeighbors', suppress_callback_exceptions=True)
+
+# URL to example type mapping
+EXAMPLE_MAP = {
+    '/link-spam-network': 'link-spam',
+    '/high-profile-news-network': 'high-profile',
+    '/iranian-news-network': 'iranian',
+}
+EXAMPLE_NAMES = {
+    'link-spam': 'Link Spam Network',
+    'high-profile': 'High-Profile News Network',
+    'iranian': 'Iranian News Network',
+}
 
 # ----- Layout -----
 app.layout = html.Div([
@@ -113,20 +125,17 @@ app.layout = html.Div([
                 html.Span("examples", className='nav-menu-label'),
                 html.Div([
                     html.Div([
-                        html.Span('Link Spam Network', id={'type': 'example-btn', 'index': 'link-spam'},
-                                  className='example-name', n_clicks=0),
+                        dcc.Link('Link Spam Network', href='/link-spam-network', className='example-name'),
                         html.A('paper', href='https://dl.acm.org/doi/10.1145/3670410',
                                target='_blank', className='example-paper-link')
                     ], className='nav-dropdown-item example-item'),
                     html.Div([
-                        html.Span('High-Profile News', id={'type': 'example-btn', 'index': 'high-profile'},
-                                  className='example-name', n_clicks=0),
+                        dcc.Link('High-Profile News', href='/high-profile-news-network', className='example-name'),
                         html.A('paper', href='https://ojs.aaai.org/index.php/ICWSM/article/view/31309',
                                target='_blank', className='example-paper-link')
                     ], className='nav-dropdown-item example-item'),
                     html.Div([
-                        html.Span('Iranian News Network', id={'type': 'example-btn', 'index': 'iranian'},
-                                  className='example-name', n_clicks=0),
+                        dcc.Link('Iranian News Network', href='/iranian-news-network', className='example-name'),
                         html.A('paper', href='https://link.springer.com/chapter/10.1007/978-3-031-72241-7_15',
                                target='_blank', className='example-paper-link')
                     ], className='nav-dropdown-item example-item'),
@@ -339,10 +348,12 @@ app.layout = html.Div([
     ], id='body-container'),
 
     # Hidden stores
+    dcc.Location(id='url', refresh=False),
     dcc.Store(id='graph-nodes', data=[]),
     dcc.Store(id='graph-links', data=[]),
     dcc.Store(id='focus-domain', data=None),
     dcc.Store(id='example-loading', data=None),
+    dcc.Store(id='pending-example', data=None),
     dcc.ConfirmDialog(id='confirm-dialog', message=''),
     dcc.ConfirmDialog(id='validation-report', message=''),
     dcc.ConfirmDialog(id='example-confirm', message=''),
@@ -647,59 +658,54 @@ def export_graph(n_clicks_list, nodes, links):
     raise PreventUpdate
 
 
-# Example loading - confirmation
+# URL change triggers example loading (with confirmation if data exists)
 @app.callback(
     [Output('example-confirm', 'displayed'),
      Output('example-confirm', 'message'),
-     Output('example-loading', 'data')],
-    Input({'type': 'example-btn', 'index': ALL}, 'n_clicks'),
+     Output('pending-example', 'data'),
+     Output('example-loading', 'data', allow_duplicate=True)],
+    Input('url', 'pathname'),
     State('graph-nodes', 'data'),
-    prevent_initial_call=True
+    prevent_initial_call='initial_duplicate'
 )
-def confirm_example_load(n_clicks_list, current_nodes):
-    ctx = callback_context
-    if not ctx.triggered or not any(n_clicks_list):
+def url_to_example(pathname, current_nodes):
+    if not pathname or pathname == '/':
+        raise PreventUpdate
+    example_type = EXAMPLE_MAP.get(pathname)
+    if not example_type:
         raise PreventUpdate
 
-    prop_id = ctx.triggered[0]['prop_id']
-    clicked_id = json.loads(prop_id.rsplit('.', 1)[0])
-    example_type = clicked_id['index']
-
-    example_names = {
-        'iranian': 'Iranian News Network',
-        'high-profile': 'High-Profile News Network',
-        'link-spam': 'Link Spam Network'
-    }
-
-    name = example_names.get(example_type, example_type)
+    name = EXAMPLE_NAMES.get(example_type, example_type)
     has_data = current_nodes and len(current_nodes) > 0
 
     if has_data:
-        msg = f"Loading '{name}' will replace the current graph. Continue?"
-        return True, msg, example_type
+        # Show confirmation, store pending example, don't load yet
+        return True, f"Loading '{name}' will replace the current graph. Continue?", example_type, dash.no_update
+    # No existing data, load directly
+    return False, '', None, example_type
 
-    return False, '', example_type
+
+# Confirmation triggers loading from pending example
+@app.callback(
+    Output('example-loading', 'data', allow_duplicate=True),
+    Input('example-confirm', 'submit_n_clicks'),
+    State('pending-example', 'data'),
+    prevent_initial_call=True
+)
+def confirm_example_load(submit_clicks, pending):
+    if submit_clicks and pending:
+        return pending
+    raise PreventUpdate
 
 
-# Example loading - execute
+# Load example graph from example-loading store
 @app.callback(
     [Output('graph-nodes', 'data', allow_duplicate=True),
      Output('graph-links', 'data', allow_duplicate=True)],
-    [Input('example-confirm', 'submit_n_clicks'),
-     Input('example-loading', 'data')],
-    State('example-confirm', 'displayed'),
+    Input('example-loading', 'data'),
     prevent_initial_call=True
 )
-def load_example_graph(confirm_clicks, example_type, was_displayed):
-    ctx = callback_context
-    if not ctx.triggered:
-        raise PreventUpdate
-
-    trigger = ctx.triggered[0]['prop_id'].split('.')[0]
-
-    if was_displayed and trigger != 'example-confirm':
-        raise PreventUpdate
-
+def load_example_graph(example_type):
     if not example_type:
         raise PreventUpdate
 
@@ -785,6 +791,17 @@ app.clientside_callback(
      Output('force-graph', 'height')],
     Input('graph-nodes', 'data'),
 )
+
+
+server = app.server
+
+
+# Serve app for example URL paths (enables direct URL navigation)
+@server.route('/link-spam-network')
+@server.route('/high-profile-news-network')
+@server.route('/iranian-news-network')
+def serve_example_routes():
+    return app.index()
 
 
 if __name__ == '__main__':
