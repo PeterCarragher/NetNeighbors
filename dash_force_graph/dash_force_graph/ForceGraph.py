@@ -11,6 +11,10 @@ class ForceGraph(Component):
     It supports interactive features like node selection, panning, zooming,
     and dynamic graph updates.
 
+    For large graphs (>10000 nodes or >20000 edges by default), node dragging
+    is automatically disabled for performance, and a warning popup is shown.
+    Nodes remain selectable.
+
     Keyword arguments:
     - id (string): The ID of this component.
     - nodes (list): List of node objects. Each node should have at least 'id'.
@@ -27,9 +31,12 @@ class ForceGraph(Component):
     - enableZoom (boolean): Enable zoom interaction (default: True).
     - enablePan (boolean): Enable pan interaction (default: True).
     - enableNodeDrag (boolean): Enable node dragging (default: True).
+        Automatically disabled for large graphs.
     - cooldownTicks (number): Simulation ticks before stopping (default: 100).
     - centerAt (string): Node ID to center the view on.
     - zoomLevel (number): Zoom level to apply.
+    - largeGraphNodeThreshold (number): Node count threshold for large graph mode (default: 10000).
+    - largeGraphEdgeThreshold (number): Edge count threshold for large graph mode (default: 20000).
     - rightClickedNode (string): ID of the last right-clicked node (read-only).
     - rightClickPosition (dict): Position {x, y} of the last right-click (read-only).
     """
@@ -61,6 +68,8 @@ class ForceGraph(Component):
         cooldownTicks=Component.UNDEFINED,
         centerAt=Component.UNDEFINED,
         zoomLevel=Component.UNDEFINED,
+        largeGraphNodeThreshold=Component.UNDEFINED,
+        largeGraphEdgeThreshold=Component.UNDEFINED,
         rightClickedNode=Component.UNDEFINED,
         rightClickPosition=Component.UNDEFINED,
         **kwargs
@@ -82,6 +91,8 @@ class ForceGraph(Component):
             'cooldownTicks',
             'centerAt',
             'zoomLevel',
+            'largeGraphNodeThreshold',
+            'largeGraphEdgeThreshold',
             'rightClickedNode',
             'rightClickPosition',
         ]
@@ -103,6 +114,8 @@ class ForceGraph(Component):
             'cooldownTicks',
             'centerAt',
             'zoomLevel',
+            'largeGraphNodeThreshold',
+            'largeGraphEdgeThreshold',
             'rightClickedNode',
             'rightClickPosition',
         ]

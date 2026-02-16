@@ -2,6 +2,10 @@ import React, { useRef, useEffect, useCallback, useState } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
 import * as d3 from 'd3-force';
 
+// Large graph thresholds
+const LARGE_GRAPH_NODE_THRESHOLD = 10000;
+const LARGE_GRAPH_EDGE_THRESHOLD = 20000;
+
 /**
  * ForceGraph - A Dash component wrapping force-graph-2d for high-performance
  * graph visualization with WebGL rendering.
@@ -21,6 +25,8 @@ const ForceGraph = (props) => {
         cooldownTicks,
         centerAt,
         zoomLevel,
+        largeGraphNodeThreshold,
+        largeGraphEdgeThreshold,
         setProps,
     } = props;
 
@@ -30,6 +36,8 @@ const ForceGraph = (props) => {
     const [graphData, setGraphData] = useState({ nodes: [], links: [] });
     const [selectedSet, setSelectedSet] = useState(new Set(selectedNodes || []));
     const [dimensions, setDimensions] = useState({ width: width || 800, height: height || 600 });
+    const [showLargeGraphWarning, setShowLargeGraphWarning] = useState(false);
+    const [isLargeGraph, setIsLargeGraph] = useState(false);
 
     // Box selection state
     const [isBoxSelecting, setIsBoxSelecting] = useState(false);
@@ -72,6 +80,22 @@ const ForceGraph = (props) => {
         const linksCopy = (links || []).map(l => ({ ...l }));
         setGraphData({ nodes: nodesCopy, links: linksCopy });
 
+        // Check if this is a large graph
+        const nodeThreshold = largeGraphNodeThreshold || LARGE_GRAPH_NODE_THRESHOLD;
+        const edgeThreshold = largeGraphEdgeThreshold || LARGE_GRAPH_EDGE_THRESHOLD;
+        const graphIsLarge = nodesCopy.length > nodeThreshold || linksCopy.length > edgeThreshold;
+
+        if (graphIsLarge && !isLargeGraph) {
+            // Graph just became large - show warning
+            setIsLargeGraph(true);
+            setShowLargeGraphWarning(true);
+            console.log(`Large graph detected: ${nodesCopy.length} nodes, ${linksCopy.length} links. Node dragging disabled for performance.`);
+        } else if (!graphIsLarge && isLargeGraph) {
+            // Graph is no longer large
+            setIsLargeGraph(false);
+            setShowLargeGraphWarning(false);
+        }
+
         // Debug: log connection values
         if (nodesCopy.length > 0) {
             const connValues = nodesCopy.map(n => n.connections || 0);
@@ -80,7 +104,7 @@ const ForceGraph = (props) => {
             const withConn = connValues.filter(c => c > 0).length;
             console.log(`Nodes: ${nodesCopy.length}, with connections: ${withConn}, min: ${minConn}, max: ${maxConn}`);
         }
-    }, [nodes, links]);
+    }, [nodes, links, largeGraphNodeThreshold, largeGraphEdgeThreshold, isLargeGraph]);
 
     // Sync selection from props
     useEffect(() => {
@@ -105,20 +129,29 @@ const ForceGraph = (props) => {
         }
     }, [zoomLevel]);
 
-    // Configure force simulation - keep it simple like the medium example
-    // Avoid collision force (O(n²) complexity)
+    // Configure force simulation - optimize for large graphs
     useEffect(() => {
         const timer = setTimeout(() => {
             if (graphRef.current) {
                 const fg = graphRef.current;
-                // Simple charge force - library default is -30, we use slightly stronger
-                fg.d3Force('charge', d3.forceManyBody().strength(-50));
+
+                if (isLargeGraph) {
+                    // Large graph optimizations from force-graph large example
+                    fg.d3Force('charge', d3.forceManyBody().strength(-30));
+                    // Lower pixel density for performance
+                    if (typeof window !== 'undefined') {
+                        window.devicePixelRatio = 1;
+                    }
+                } else {
+                    // Simple charge force - library default is -30, we use slightly stronger
+                    fg.d3Force('charge', d3.forceManyBody().strength(-50));
+                }
                 // Reheat simulation to apply changes
                 fg.d3ReheatSimulation();
             }
         }, 100);
         return () => clearTimeout(timer);
-    }, [graphData]);
+    }, [graphData, isLargeGraph]);
 
     // Node click handler - defensive about event being undefined
     const handleNodeClick = useCallback((node, event) => {
@@ -289,6 +322,10 @@ const ForceGraph = (props) => {
         };
     };
 
+    // Determine if node dragging should be enabled
+    // For large graphs, disable dragging for performance (but keep selection)
+    const effectiveEnableNodeDrag = isLargeGraph ? false : (enableNodeDrag !== false);
+
     return (
         <div
             id={id}
@@ -301,6 +338,54 @@ const ForceGraph = (props) => {
                 position: 'relative'
             }}
         >
+            {/* Large graph warning popup */}
+            {showLargeGraphWarning && (
+                <div
+                    style={{
+                        position: 'absolute',
+                        top: '50%',
+                        left: '50%',
+                        transform: 'translate(-50%, -50%)',
+                        backgroundColor: 'rgba(255, 255, 255, 0.98)',
+                        border: '2px solid #f0ad4e',
+                        borderRadius: '8px',
+                        padding: '20px 30px',
+                        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
+                        zIndex: 2000,
+                        maxWidth: '400px',
+                        textAlign: 'center',
+                    }}
+                >
+                    <div style={{ fontSize: '24px', marginBottom: '10px' }}>⚠️</div>
+                    <h3 style={{ margin: '0 0 10px 0', color: '#333', fontSize: '18px' }}>
+                        Large Graph Detected
+                    </h3>
+                    <p style={{ margin: '0 0 15px 0', color: '#666', fontSize: '14px', lineHeight: '1.5' }}>
+                        This graph has <strong>{graphData.nodes.length.toLocaleString()}</strong> nodes
+                        and <strong>{graphData.links.length.toLocaleString()}</strong> links.
+                        <br /><br />
+                        Node dragging has been disabled to improve performance.
+                        You can still select nodes by clicking on them.
+                    </p>
+                    <button
+                        onClick={() => setShowLargeGraphWarning(false)}
+                        style={{
+                            backgroundColor: '#5cb85c',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            padding: '10px 25px',
+                            fontSize: '14px',
+                            cursor: 'pointer',
+                            fontWeight: 'bold',
+                        }}
+                        onMouseOver={(e) => e.target.style.backgroundColor = '#4cae4c'}
+                        onMouseOut={(e) => e.target.style.backgroundColor = '#5cb85c'}
+                    >
+                        Got it
+                    </button>
+                </div>
+            )}
             {/* Invisible overlay for box selection when shift is held */}
             <div
                 ref={overlayRef}
@@ -329,17 +414,19 @@ const ForceGraph = (props) => {
                 width={dimensions.width}
                 height={dimensions.height}
                 nodeColor={getNodeColor}
-                nodeRelSize={6}
+                nodeRelSize={isLargeGraph ? 4 : 6}
                 nodeLabel={getNodeLabel}
-                linkColor={() => 'rgba(150, 150, 150, 0.2)'}
-                linkWidth={0.5}
+                linkColor={() => isLargeGraph ? 'rgba(150, 150, 150, 0.1)' : 'rgba(150, 150, 150, 0.2)'}
+                linkWidth={isLargeGraph ? 0.3 : 0.5}
                 onNodeClick={handleNodeClick}
                 onBackgroundClick={handleBackgroundClick}
                 onNodeRightClick={handleNodeRightClick}
                 enableZoomInteraction={enableZoom !== false}
                 enablePanInteraction={enablePan !== false}
-                enableNodeDrag={enableNodeDrag !== false}
-                cooldownTicks={cooldownTicks || 100}
+                enableNodeDrag={effectiveEnableNodeDrag}
+                cooldownTicks={isLargeGraph ? 200 : (cooldownTicks || 100)}
+                d3AlphaDecay={isLargeGraph ? 0.01 : 0.0228}
+                d3VelocityDecay={isLargeGraph ? 0.15 : 0.4}
             />
             </div>
         </div>
@@ -354,6 +441,8 @@ ForceGraph.defaultProps = {
     enablePan: true,
     enableNodeDrag: true,
     cooldownTicks: 100,
+    largeGraphNodeThreshold: LARGE_GRAPH_NODE_THRESHOLD,
+    largeGraphEdgeThreshold: LARGE_GRAPH_EDGE_THRESHOLD,
 };
 
 export default ForceGraph;
