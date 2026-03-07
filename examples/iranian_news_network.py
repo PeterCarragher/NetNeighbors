@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
 def build_network(
     file_path: str = None,
-    min_connections: int = 10,
+    min_connections: int = 100,
     webgraph_dir: Optional[str] = None,
     webgraph_version: Optional[str] = None,
     auto_download: bool = False,
@@ -72,11 +72,11 @@ def build_network(
     print(f"Found {len(internal_edges)} internal links between seed domains")
 
     # Discover external sites that backlink to these domains
-    discovery = wg.discover_backlinks(
-        seeds=valid_domains,
-        min_connections=min_connections,
-    )
-    print(f"Found {len(discovery.nodes)} external sites with >= {min_connections} backlinks")
+    # discovery = wg.discover_backlinks(
+    #     seeds=valid_domains,
+    #     min_connections=min_connections,
+    # )
+    # print(f"Found {len(discovery.nodes)} external sites with >= {min_connections} backlinks")
 
     # Build NetworkX graph
     nx = require_networkx()
@@ -89,18 +89,18 @@ def build_network(
     # Add internal edges
     G.add_edges_from(internal_edges, edge_type="internal")
 
-    # Add discovered nodes and their edges
-    for node in discovery.nodes:
-        G.add_node(
-            node["domain"],
-            is_seed=False,
-            node_type="discovered",
-            connections=node["connections"],
-            percentage=node["percentage"],
-        )
+    # # Add discovered nodes and their edges
+    # for node in discovery.nodes:
+    #     G.add_node(
+    #         node["domain"],
+    #         is_seed=False,
+    #         node_type="discovered",
+    #         connections=node["connections"],
+    #         percentage=node["percentage"],
+    #     )
 
-    for src, tgt in discovery.edges:
-        G.add_edge(src, tgt, edge_type="external")
+    # for src, tgt in discovery.edges:
+    #     G.add_edge(src, tgt, edge_type="external")
 
     print(f"Final graph: {G.number_of_nodes()} nodes, {G.number_of_edges()} edges")
     return G
