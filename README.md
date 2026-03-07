@@ -17,7 +17,7 @@ There is also a [separate repository for a colab notebook](https://github.com/Pe
 
 ## Discovery Interface
 ```bash
-WEBGRAPH_DIR=/content/webgraphs/ WEBGRAPH_VERSION=cc-main-2024-feb-apr-may python discovery_network_vis.py
+WEBGRAPH_DIR=/content/webgraphs/ WEBGRAPH_VERSION=cc-main-2024-feb-apr-may python force_graph_vis.py
 ```
 
 ---
