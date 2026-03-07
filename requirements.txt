@@ -1,6 +1,7 @@
 # Web UI (Dash + Cytoscape network visualization)
 dash>=2.14.0
 dash-cytoscape>=1.0.0
+dash-force-graph @ git+https://github.com/PeterCarragher/dash-force-graph.git
 
 # Webgraph interface (handles Java bridge, graph loading, discovery)
 pyccwebgraph>=0.1.0

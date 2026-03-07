@@ -25,6 +25,14 @@ sys.path.insert(0, str(Path(__file__).parent / "examples"))
 # Path to precomputed example graphs
 PICKLE_DIR = Path(__file__).parent / "examples" / "pickle"
 
+# Large graph thresholds (moved from JS component)
+LARGE_GRAPH_NODE_THRESHOLD = 10000
+LARGE_GRAPH_EDGE_THRESHOLD = 20000
+
+# Node colors
+SEED_COLOR = '#ff6b6b'
+DISCOVERED_COLOR = '#4ecdc4'
+
 # Regex for a well-formed domain
 DOMAIN_RE = re.compile(
     r'^(?!-)'
@@ -340,6 +348,7 @@ app.layout = html.Div([
                     selectedNodes=[],
                     width=None,  # Will be set by clientside callback
                     height=None,
+                    nodeColor=DISCOVERED_COLOR,
                 )
             ], id='graph-container', style={'flex': '1', 'position': 'relative'}),
 
@@ -375,12 +384,29 @@ app.layout = html.Div([
 # Sync nodes/links stores to ForceGraph component
 @app.callback(
     [Output('force-graph', 'nodes'),
-     Output('force-graph', 'links')],
+     Output('force-graph', 'links'),
+     Output('force-graph', 'mode')],
     [Input('graph-nodes', 'data'),
      Input('graph-links', 'data')]
 )
 def sync_graph_data(nodes, links):
-    return nodes or [], links or []
+    nodes = nodes or []
+    links = links or []
+
+    # Set node colors based on type
+    for node in nodes:
+        node_type = node.get('type', 'discovered')
+        if node_type in ('seed', 'casino', 'misinfo'):
+            node['color'] = SEED_COLOR
+        else:
+            node['color'] = DISCOVERED_COLOR
+
+    # Determine mode based on graph size
+    is_large = (len(nodes) > LARGE_GRAPH_NODE_THRESHOLD or
+                len(links) > LARGE_GRAPH_EDGE_THRESHOLD)
+    mode = 'performance' if is_large else 'interactive'
+
+    return nodes, links, mode
 
 
 # Update domain list from nodes

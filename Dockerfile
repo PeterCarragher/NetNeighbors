@@ -23,10 +23,6 @@ COPY --from=builder /build/cc-webgraph/target/cc-webgraph-0.1-SNAPSHOT-jar-with-
 COPY requirements.txt /app/
 RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
 
-# Install dash-force-graph component
-COPY dash_force_graph/ /app/dash_force_graph/
-RUN pip3 install --no-cache-dir --break-system-packages /app/dash_force_graph/
-
 # Copy application
 COPY force_graph_vis.py /app/
 COPY assets/ /app/assets/
