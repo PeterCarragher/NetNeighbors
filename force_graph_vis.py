@@ -417,9 +417,11 @@ app.layout = html.Div([
 @app.callback(
     [Output('force-graph', 'nodes'),
      Output('force-graph', 'links'),
-     Output('force-graph', 'mode')],
+     Output('force-graph', 'mode'),
+     Output('force-graph', 'selectedNodes', allow_duplicate=True)],
     [Input('graph-nodes', 'data'),
-     Input('graph-links', 'data')]
+     Input('graph-links', 'data')],
+    prevent_initial_call=True
 )
 def sync_graph_data(nodes, links):
     nodes = nodes or []
@@ -434,7 +436,8 @@ def sync_graph_data(nodes, links):
                 len(links) > LARGE_GRAPH_EDGE_THRESHOLD)
     mode = 'performance' if is_large else 'interactive'
 
-    return nodes, links, mode
+    # no_update preserves whatever selectedNodes the client currently has
+    return nodes, links, mode, dash.no_update
 
 
 # Legend: rebuild whenever nodes change
@@ -555,7 +558,7 @@ def update_domain_list(nodes, search_text):
 )
 def domain_click_to_center(n_clicks_list):
     ctx = callback_context
-    if not ctx.triggered:
+    if not ctx.triggered or not any(n_clicks_list):
         raise PreventUpdate
     prop_id = ctx.triggered[0]['prop_id']
     clicked_id = json.loads(prop_id.rsplit('.', 1)[0])
