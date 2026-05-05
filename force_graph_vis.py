@@ -135,11 +135,13 @@ EXAMPLE_MAP = {
     '/link-spam-network': 'link-spam',
     '/high-profile-news-network': 'high-profile',
     '/iranian-news-network': 'iranian',
+    '/pravda-network': 'pravda',
 }
 EXAMPLE_NAMES = {
     'link-spam': 'Link Spam Network',
     'high-profile': 'High-Profile News Network',
     'iranian': 'Iranian News Network',
+    'pravda': 'Pravda Network',
 }
 
 # ----- Layout -----
@@ -165,6 +167,11 @@ app.layout = html.Div([
                     html.Div([
                         dcc.Link('Iranian News Network', href='/iranian-news-network', className='example-name'),
                         html.A('paper', href='https://link.springer.com/chapter/10.1007/978-3-031-72241-7_15',
+                               target='_blank', className='example-paper-link')
+                    ], className='nav-dropdown-item example-item'),
+                    html.Div([
+                        dcc.Link('Pravda Network', href='/pravda-network', className='example-name'),
+                        html.A('paper', href='https://link.springer.com/chapter/10.1007/978-3-032-07715-8_8',
                                target='_blank', className='example-paper-link')
                     ], className='nav-dropdown-item example-item'),
                 ], className='nav-dropdown')
@@ -658,7 +665,8 @@ def import_and_add(file_contents, add_clicks, filename, textarea_value, current_
 # Discover neighbors
 @app.callback(
     [Output('graph-nodes', 'data', allow_duplicate=True),
-     Output('graph-links', 'data', allow_duplicate=True)],
+     Output('graph-links', 'data', allow_duplicate=True),
+     Output('force-graph', 'selectedNodes', allow_duplicate=True)],
     Input('discover-btn', 'n_clicks'),
     [State('force-graph', 'selectedNodes'),
      State('direction-radio', 'value'),
@@ -690,7 +698,8 @@ def discover_neighbors(n_clicks, selected_nodes, direction, min_conn, current_no
             current_links.append(link)
             existing_links.add(key)
 
-    return current_nodes, current_links
+    # Re-output the seed selection so it survives the graph update
+    return current_nodes, current_links, selected_nodes
 
 
 # Delete selected nodes
@@ -844,6 +853,7 @@ def load_example_graph(example_type):
         'iranian': 'iranian_news_network.pkl',
         'high-profile': 'high_profile_news_network.pkl',
         'link-spam': 'link_spam.pkl',
+        'pravda': 'pravda_network.pkl',
     }
 
     pickle_file = pickle_files.get(example_type)
