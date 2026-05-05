@@ -346,6 +346,8 @@ app.layout = html.Div([
                     nodes=[],
                     links=[],
                     selectedNodes=[],
+                    fitView=0,
+                    fitViewPadding=10,
                     width=None,  # Will be set by clientside callback
                     height=None,
                     nodeColor=DISCOVERED_COLOR,
@@ -385,11 +387,13 @@ app.layout = html.Div([
 @app.callback(
     [Output('force-graph', 'nodes'),
      Output('force-graph', 'links'),
-     Output('force-graph', 'mode')],
+     Output('force-graph', 'mode'),
+     Output('force-graph', 'fitView')],
     [Input('graph-nodes', 'data'),
-     Input('graph-links', 'data')]
+     Input('graph-links', 'data')],
+    [State('force-graph', 'fitView')]
 )
-def sync_graph_data(nodes, links):
+def sync_graph_data(nodes, links, current_fit_view):
     nodes = nodes or []
     links = links or []
 
@@ -406,7 +410,9 @@ def sync_graph_data(nodes, links):
                 len(links) > LARGE_GRAPH_EDGE_THRESHOLD)
     mode = 'performance' if is_large else 'interactive'
 
-    return nodes, links, mode
+    fit_view = (current_fit_view or 0) + 1
+
+    return nodes, links, mode, fit_view
 
 
 # Update domain list from nodes
