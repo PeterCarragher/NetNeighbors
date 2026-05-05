@@ -9,6 +9,7 @@ import sys
 import base64
 import io
 import pickle
+import networkx as nx
 import dash
 from dash import html, dcc, Input, Output, State, callback_context, ALL
 from dash.exceptions import PreventUpdate
@@ -752,6 +753,10 @@ def load_example_graph(example_type):
         # Load precomputed graph from pickle
         with open(pickle_path, 'rb') as f:
             G = pickle.load(f)
+
+        # Prune isolates (nodes with no edges) before converting
+        isolates = list(nx.isolates(G))
+        G.remove_nodes_from(isolates)
 
         # Calculate in-degree and out-degree for fallback
         in_degree = dict(G.in_degree())
