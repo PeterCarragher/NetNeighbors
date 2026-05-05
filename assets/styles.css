@@ -302,3 +302,28 @@ html, body {
 @keyframes spin {
     to { transform: rotate(360deg); }
 }
+
+/* Legend label — looks like plain text, becomes an editable field on click */
+.legend-label-input {
+    border: none;
+    border-bottom: 1px solid transparent;
+    background: transparent;
+    font-family: 'Space Mono', monospace;
+    font-size: 15px;
+    color: #333;
+    cursor: pointer;
+    padding: 0;
+    outline: none;
+    width: 150px;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.legend-label-input:hover {
+    border-bottom-color: #bbb;
+}
+
+.legend-label-input:focus {
+    cursor: text;
+    border-bottom-color: #667eea;
+    background: rgba(102, 126, 234, 0.06);
+}

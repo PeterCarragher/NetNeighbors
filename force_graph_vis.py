@@ -108,7 +108,6 @@ class GraphExplorer:
                     'target': tgt
                 })
 
-        self.hop_counter += 1
         return nodes, links
 
 
@@ -410,6 +409,7 @@ app.layout = html.Div([
     dcc.Store(id='example-loading', data=None),
     dcc.Store(id='pending-example', data=None),
     dcc.Store(id='last-clicked-domain', data=None),
+    dcc.Store(id='legend-labels', data={}),
     dcc.ConfirmDialog(id='confirm-dialog', message=''),
     dcc.ConfirmDialog(id='validation-report', message=''),
     dcc.ConfirmDialog(id='example-confirm', message=''),
@@ -455,13 +455,14 @@ def sync_graph_data(nodes, links):
     return nodes, links, mode, dash.no_update
 
 
-# Legend: rebuild whenever nodes change
+# Legend: rebuild whenever nodes or stored labels change
 @app.callback(
     [Output('graph-legend', 'children'),
      Output('graph-legend', 'style')],
-    Input('graph-nodes', 'data')
+    Input('graph-nodes', 'data'),
+    State('legend-labels', 'data'),
 )
-def update_legend(nodes):
+def update_legend(nodes, legend_labels):
     base_style = {
         'position': 'absolute',
         'bottom': '16px',
@@ -469,8 +470,9 @@ def update_legend(nodes):
         'background': 'rgba(255,255,255,0.92)',
         'border': '1px solid #ddd',
         'border-radius': '6px',
-        'padding': '8px 12px',
+        'padding': '10px 16px',
         'font-size': '15px',
+        'min-width': '180px',
         'z-index': '10',
     }
 
@@ -478,43 +480,54 @@ def update_legend(nodes):
         return [], {**base_style, 'display': 'none'}
 
     hops_present = sorted({n.get('hop', 0) for n in nodes})
-
-    def swatch(color):
-        return html.Span(style={
-            'display': 'inline-block',
-            'width': '11px',
-            'height': '11px',
-            'border-radius': '50%',
-            'background': color,
-            'margin-right': '7px',
-            'flex-shrink': '0',
-        })
+    legend_labels = legend_labels or {}
 
     rows = []
     for hop in hops_present:
         color = hop_color(hop)
-        label = 'seed' if hop == 0 else f'hop {hop}'
+        default_label = 'seed' if hop == 0 else f'hop {hop}'
+        label = legend_labels.get(str(hop), default_label)
         rows.append(html.Div(
-            [swatch(color), label],
-            id={'type': 'legend-item', 'index': hop},
-            n_clicks=0,
+            [
+                # Swatch — click to select all nodes of this hop
+                html.Span(
+                    id={'type': 'legend-swatch', 'index': hop},
+                    n_clicks=0,
+                    title='click to select all',
+                    style={
+                        'display': 'inline-block',
+                        'width': '11px',
+                        'height': '11px',
+                        'border-radius': '50%',
+                        'background': color,
+                        'margin-right': '7px',
+                        'flex-shrink': '0',
+                        'cursor': 'pointer',
+                    }
+                ),
+                # Label — click/double-click to rename
+                dcc.Input(
+                    id={'type': 'legend-label', 'index': hop},
+                    value=label,
+                    type='text',
+                    debounce=True,
+                    className='legend-label-input',
+                ),
+            ],
             style={
                 'display': 'flex',
                 'align-items': 'center',
                 'margin-bottom': '4px',
-                'color': '#333',
-                'cursor': 'pointer',
-                'userSelect': 'none',
             }
         ))
 
     return rows, {**base_style, 'display': 'block'}
 
 
-# Legend item click → select all nodes of that hop
+# Swatch click → select all nodes of that hop
 @app.callback(
     Output('force-graph', 'selectedNodes', allow_duplicate=True),
-    Input({'type': 'legend-item', 'index': ALL}, 'n_clicks'),
+    Input({'type': 'legend-swatch', 'index': ALL}, 'n_clicks'),
     State('graph-nodes', 'data'),
     prevent_initial_call=True
 )
@@ -526,6 +539,27 @@ def legend_select_hop(n_clicks_list, nodes):
     hop = json.loads(prop_id.rsplit('.', 1)[0])['index']
     nodes = nodes or []
     return [n['id'] for n in nodes if n.get('hop', 0) == hop]
+
+
+# Legend label rename — persist to store when input blurs or Enter is pressed
+@app.callback(
+    Output('legend-labels', 'data'),
+    Input({'type': 'legend-label', 'index': ALL}, 'value'),
+    State('legend-labels', 'data'),
+    prevent_initial_call=True
+)
+def save_legend_label(values, current_labels):
+    ctx = callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+    current_labels = dict(current_labels or {})
+    prop_id = ctx.triggered[0]['prop_id']
+    hop = json.loads(prop_id.rsplit('.', 1)[0])['index']
+    value = ctx.triggered[0]['value']
+    if value is None:
+        raise PreventUpdate
+    current_labels[str(hop)] = value
+    return current_labels
 
 
 # Update domain list from nodes
@@ -693,10 +727,15 @@ def discover_neighbors(n_clicks, selected_nodes, direction, min_conn, current_no
     new_nodes, new_links = explorer.discover_neighbors(selected_nodes, min_conn, direction)
 
     existing_ids = {n['id'] for n in current_nodes}
+    added_any = False
     for node in new_nodes:
         if node['id'] not in existing_ids:
             current_nodes.append(node)
             existing_ids.add(node['id'])
+            added_any = True
+
+    if added_any:
+        explorer.hop_counter += 1
 
     # Add new links (avoid duplicates)
     existing_links = {(l['source'], l['target']) for l in current_links}
@@ -746,10 +785,11 @@ def delete_selected(n_clicks, selected_nodes, current_nodes, current_links):
     Output('export-download', 'data'),
     Input({'type': 'export-btn', 'index': ALL}, 'n_clicks'),
     [State('graph-nodes', 'data'),
-     State('graph-links', 'data')],
+     State('graph-links', 'data'),
+     State('legend-labels', 'data')],
     prevent_initial_call=True
 )
-def export_graph(n_clicks_list, nodes, links):
+def export_graph(n_clicks_list, nodes, links, legend_labels):
     ctx = callback_context
     if not ctx.triggered or not any(n_clicks_list):
         raise PreventUpdate
@@ -760,14 +800,20 @@ def export_graph(n_clicks_list, nodes, links):
 
     nodes = nodes or []
     links = links or []
+    legend_labels = legend_labels or {}
 
     if not nodes:
         raise PreventUpdate
 
+    def hop_label(hop):
+        default = 'seed' if hop == 0 else f'hop {hop}'
+        return legend_labels.get(str(hop), default)
+
     if fmt == 'csv-nodes':
-        lines = ['domain,type,hop,connections']
+        lines = ['domain,type,hop,hop_label,connections']
         for n in nodes:
-            lines.append(f"{n['id']},{n.get('type','')},{n.get('hop','')},{n.get('connections','')}")
+            hop = n.get('hop', 0)
+            lines.append(f"{n['id']},{n.get('type','')},{hop},{hop_label(hop)},{n.get('connections','')}")
         return dict(content='\n'.join(lines), filename='nodes.csv')
 
     elif fmt == 'csv-edges':
@@ -784,14 +830,17 @@ def export_graph(n_clicks_list, nodes, links):
         ET.SubElement(attrs, 'attribute', id='0', title='type', type='string')
         ET.SubElement(attrs, 'attribute', id='1', title='hop', type='integer')
         ET.SubElement(attrs, 'attribute', id='2', title='connections', type='integer')
+        ET.SubElement(attrs, 'attribute', id='3', title='hop_label', type='string')
 
         nodes_el = ET.SubElement(graph_el, 'nodes')
         for n in nodes:
+            hop = n.get('hop', 0)
             node_el = ET.SubElement(nodes_el, 'node', id=n['id'], label=n.get('label', n['id']))
             av = ET.SubElement(node_el, 'attvalues')
             ET.SubElement(av, 'attvalue', {'for': '0', 'value': str(n.get('type', ''))})
-            ET.SubElement(av, 'attvalue', {'for': '1', 'value': str(n.get('hop', ''))})
+            ET.SubElement(av, 'attvalue', {'for': '1', 'value': str(hop)})
             ET.SubElement(av, 'attvalue', {'for': '2', 'value': str(n.get('connections', ''))})
+            ET.SubElement(av, 'attvalue', {'for': '3', 'value': hop_label(hop)})
 
         edges_el = ET.SubElement(graph_el, 'edges')
         for i, l in enumerate(links):
@@ -848,7 +897,8 @@ def confirm_example_load(submit_clicks, pending):
 # Load example graph from example-loading store
 @app.callback(
     [Output('graph-nodes', 'data', allow_duplicate=True),
-     Output('graph-links', 'data', allow_duplicate=True)],
+     Output('graph-links', 'data', allow_duplicate=True),
+     Output('legend-labels', 'data', allow_duplicate=True)],
     Input('example-loading', 'data'),
     prevent_initial_call=True
 )
@@ -880,7 +930,21 @@ def load_example_graph(example_type):
         isolates = list(nx.isolates(G))
         G.remove_nodes_from(isolates)
 
-        # Calculate in-degree and out-degree for fallback
+        # Build node_type → hop mapping. Seeds are always hop 0; each distinct
+        # non-seed node_type gets the next available hop number so it gets its
+        # own color and legend entry.
+        type_to_hop = {'seed': 0}
+        legend_labels = {'0': 'seed'}
+        next_hop = 1
+        for _, data in G.nodes(data=True):
+            if not data.get('is_seed'):
+                ntype = data.get('node_type', 'discovered')
+                if ntype not in type_to_hop:
+                    type_to_hop[ntype] = next_hop
+                    legend_labels[str(next_hop)] = ntype
+                    next_hop += 1
+
+        # Calculate in-degree and out-degree for connection counts
         in_degree = dict(G.in_degree())
         out_degree = dict(G.out_degree())
 
@@ -891,37 +955,32 @@ def load_example_graph(example_type):
         for node, data in G.nodes(data=True):
             node_type = data.get('node_type', 'seed')
 
-            # Use existing connections attribute if available
-            # For discovered nodes, prefer out_degree (how many seeds they connect to)
-            # For seed nodes, prefer in_degree (how many discovered nodes link to them)
             if 'total_connections' in data:
-                # link_spam nodes have this attribute
                 connections = data['total_connections']
             elif 'connections' in data:
-                # iranian_news discovered nodes have this
                 connections = data['connections']
             elif data.get('is_seed'):
-                # Seed nodes: count how many discovered nodes link to them
                 connections = in_degree.get(node, 0)
             else:
-                # Discovered nodes: count how many seeds they link to
                 connections = out_degree.get(node, 0)
+
+            if data.get('is_seed'):
+                node_hop = 0
+            else:
+                node_hop = type_to_hop.get(node_type, 1)
 
             nodes.append({
                 'id': node,
                 'label': node,
                 'type': node_type,
-                'hop': 0 if data.get('is_seed') else 1,
+                'hop': node_hop,
                 'connections': connections,
             })
 
-        for src, tgt, data in G.edges(data=True):
-            links.append({
-                'source': src,
-                'target': tgt,
-            })
+        for src, tgt, _ in G.edges(data=True):
+            links.append({'source': src, 'target': tgt})
 
-        return nodes, links
+        return nodes, links, legend_labels
 
     except Exception as e:
         print(f"Error loading example from {pickle_path}: {e}")
@@ -960,4 +1019,4 @@ def serve_example_routes():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8050))
     # use_reloader=False prevents double webgraph loading in debug mode
-    app.run(debug=True, use_reloader=False, host='0.0.0.0', port=port) #, dev_tools_ui=False, dev_tools_props_check=False)
+    app.run(debug=False, use_reloader=False, host='0.0.0.0', port=port) #, dev_tools_ui=False, dev_tools_props_check=False)
