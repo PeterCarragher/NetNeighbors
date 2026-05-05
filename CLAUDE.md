@@ -18,7 +18,20 @@ Standalone Python package providing the `CCWebgraph` class:
 - `download.py` — Webgraph file download with progress bars, offset building.
 
 ### Dash App
-- `discovery_network_vis.py` — Interactive graph explorer using Dash Cytoscape. Imports `CCWebgraph` from pyccwebgraph. Port 8050 (configurable via `PORT` env var).
+- `force_graph_vis.py` — Primary interactive graph explorer using a custom `dash-force-graph` component (WebGL canvas via `react-force-graph-2d`). Port 8050.
+- `discovery_network_vis.py` — Older explorer using Dash Cytoscape (superseded by `force_graph_vis.py`).
+
+### dash-force-graph Component
+The ForceGraph canvas component is a separate local package at `/home/peter/dev/open-source/dash-force-graph/`. It is installed in editable mode (`pip install -e .`), so Python always picks up the latest Python-side changes automatically. However, **any change to its React source (`src/ForceGraph.js`) requires a JS rebuild before it takes effect**:
+
+```bash
+cd /home/peter/dev/open-source/dash-force-graph
+npm run build          # compile src/ForceGraph.js → dash_force_graph/bundle.js
+```
+
+After rebuilding, restart the Dash server and do a hard-refresh in the browser (Ctrl+Shift+R) — Dash fingerprints the bundle filename, so the browser won't pick up the new JS otherwise.
+
+See `/home/peter/dev/open-source/dash-force-graph/CLAUDE.md` for full component architecture and prop documentation.
 
 ### Java Core (`src/`)
 - `DiscoveryTool.java` — Memory-optimized two-pass CLI discovery tool. Not required by the Dash app (which uses py4j bridge instead), but useful for batch processing.

@@ -11,7 +11,7 @@ import io
 import pickle
 import networkx as nx
 import dash
-from dash import html, dcc, Input, Output, State, callback_context, ALL
+from dash import html, dcc, Input, Output, State, callback_context, ALL, ClientsideFunction
 from dash.exceptions import PreventUpdate
 import json
 import xml.etree.ElementTree as ET
@@ -409,6 +409,7 @@ app.layout = html.Div([
     dcc.Store(id='focus-domain', data=None),
     dcc.Store(id='example-loading', data=None),
     dcc.Store(id='pending-example', data=None),
+    dcc.Store(id='last-clicked-domain', data=None),
     dcc.ConfirmDialog(id='confirm-dialog', message=''),
     dcc.ConfirmDialog(id='validation-report', message=''),
     dcc.ConfirmDialog(id='example-confirm', message=''),
@@ -531,9 +532,10 @@ def legend_select_hop(n_clicks_list, nodes):
 @app.callback(
     Output('domain-list-container', 'children'),
     [Input('graph-nodes', 'data'),
-     Input('domain-search', 'value')]
+     Input('domain-search', 'value'),
+     Input('force-graph', 'selectedNodes')]
 )
-def update_domain_list(nodes, search_text):
+def update_domain_list(nodes, search_text, selected_nodes):
     if not nodes:
         return html.Div(
             "no domains yet. add some below.",
@@ -552,32 +554,31 @@ def update_domain_list(nodes, search_text):
             style={'color': '#999', 'font-style': 'italic', 'padding': '20px', 'text-align': 'center'}
         )
 
+    selected_set = set(selected_nodes or [])
     return [
         html.Div(
             domain,
             id={'type': 'domain-item', 'index': domain},
-            className='domain-item',
+            className='domain-item selected' if domain in selected_set else 'domain-item',
             n_clicks=0
         )
         for domain in domains
     ]
 
 
-# Domain click -> center on node and select it
-@app.callback(
+# Domain click -> multi-select with Ctrl/Shift, center on clicked node
+app.clientside_callback(
+    ClientsideFunction(namespace='clientside', function_name='domain_click_handler'),
     [Output('force-graph', 'centerAt'),
-     Output('force-graph', 'selectedNodes', allow_duplicate=True)],
+     Output('force-graph', 'selectedNodes', allow_duplicate=True),
+     Output('last-clicked-domain', 'data')],
     Input({'type': 'domain-item', 'index': ALL}, 'n_clicks'),
+    [State('force-graph', 'selectedNodes'),
+     State('graph-nodes', 'data'),
+     State('domain-search', 'value'),
+     State('last-clicked-domain', 'data')],
     prevent_initial_call=True
 )
-def domain_click_to_center(n_clicks_list):
-    ctx = callback_context
-    if not ctx.triggered or not any(n_clicks_list):
-        raise PreventUpdate
-    prop_id = ctx.triggered[0]['prop_id']
-    clicked_id = json.loads(prop_id.rsplit('.', 1)[0])
-    domain = clicked_id['index']
-    return domain, [domain]
 
 
 # Selection count display

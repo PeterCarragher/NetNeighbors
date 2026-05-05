@@ -139,6 +139,15 @@ html, body {
     background: #e8f0fe;
 }
 
+.domain-item.selected {
+    background: #d2e3fc;
+    font-weight: bold;
+}
+
+.domain-item.selected:hover {
+    background: #c0d6fb;
+}
+
 .domain-item:last-child {
     border-bottom: none;
 }

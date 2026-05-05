@@ -1,3 +1,50 @@
+// Named clientside function for domain-list multi-select (shift/ctrl-click).
+// Defined here so Dash can look it up reliably via ClientsideFunction rather
+// than relying on the auto-generated inline-callback hash.
+window.dash_clientside = Object.assign({}, window.dash_clientside, {
+    clientside: Object.assign({}, (window.dash_clientside || {}).clientside, {
+        domain_click_handler: function(n_clicks_list, current_selected, all_nodes, search_text, last_clicked) {
+            var ctx = dash_clientside.callback_context;
+            if (!ctx || !ctx.triggered || !ctx.triggered.length) {
+                throw dash_clientside.PreventUpdate;
+            }
+            if (!n_clicks_list || !n_clicks_list.some(function(n) { return n; })) {
+                throw dash_clientside.PreventUpdate;
+            }
+
+            var triggered = ctx.triggered[0];
+            var id_obj = JSON.parse(triggered.prop_id.split('.n_clicks')[0]);
+            var domain = id_obj.index;
+
+            var domains = (all_nodes || []).map(function(n) { return n.id; }).sort();
+            if (search_text) {
+                var q = search_text.toLowerCase();
+                domains = domains.filter(function(d) { return d.toLowerCase().indexOf(q) >= 0; });
+            }
+
+            current_selected = current_selected || [];
+            var mod = window._lastModifiers || {};
+
+            var newSelected;
+            if (mod.ctrl) {
+                var already = current_selected.indexOf(domain);
+                newSelected = already >= 0
+                    ? current_selected.filter(function(d) { return d !== domain; })
+                    : current_selected.concat([domain]);
+            } else if (mod.shift && last_clicked && domains.indexOf(last_clicked) >= 0) {
+                var a = domains.indexOf(last_clicked);
+                var b = domains.indexOf(domain);
+                var lo = Math.min(a, b), hi = Math.max(a, b);
+                newSelected = domains.slice(lo, hi + 1);
+            } else {
+                newSelected = [domain];
+            }
+
+            return [domain, newSelected, domain];
+        }
+    })
+});
+
 // Right-click context menu and performance setup for graph area
 document.addEventListener('DOMContentLoaded', function() {
 
@@ -47,8 +94,11 @@ document.addEventListener('DOMContentLoaded', function() {
         menu.style.display = 'block';
     });
 
-    // Dismiss context menu on mousedown outside
+    // Capture modifier key state on mousedown so clientside callbacks can reliably read it.
+    // window.event is stale by the time Dash fires its callbacks, but _lastModifiers is set first.
+    window._lastModifiers = { ctrl: false, shift: false };
     document.addEventListener('mousedown', function(e) {
+        window._lastModifiers = { ctrl: e.ctrlKey || e.metaKey, shift: e.shiftKey };
         var menu = document.getElementById('context-menu');
         if (menu && menu.style.display === 'block' && !menu.contains(e.target)) {
             menu.style.display = 'none';
