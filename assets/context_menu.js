@@ -113,7 +113,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
 
             e.preventDefault();
-            var btn = document.getElementById('delete-trigger-btn');
+            var btn = document.getElementById('delete-btn');
             if (btn) btn.click();
         }
     });
