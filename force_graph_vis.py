@@ -136,12 +136,14 @@ EXAMPLE_MAP = {
     '/high-profile-news-network': 'high-profile',
     '/iranian-news-network': 'iranian',
     '/pravda-network': 'pravda',
+    '/think-tanks': 'think-tanks',
 }
 EXAMPLE_NAMES = {
     'link-spam': 'Link Spam Network',
     'high-profile': 'High-Profile News Network',
     'iranian': 'Iranian News Network',
     'pravda': 'Pravda Network',
+    'think-tanks': 'Think Tanks',
 }
 
 # ----- Layout -----
@@ -165,13 +167,18 @@ app.layout = html.Div([
                                target='_blank', className='example-paper-link')
                     ], className='nav-dropdown-item example-item'),
                     html.Div([
-                        dcc.Link('Iranian News Network', href='/iranian-news-network', className='example-name'),
+                        dcc.Link('Iranian News Network (.ir)', href='/iranian-news-network', className='example-name'),
                         html.A('paper', href='https://link.springer.com/chapter/10.1007/978-3-031-72241-7_15',
                                target='_blank', className='example-paper-link')
                     ], className='nav-dropdown-item example-item'),
                     html.Div([
-                        dcc.Link('Pravda Network', href='/pravda-network', className='example-name'),
+                        dcc.Link('Pravda Network (.ru, .ua)', href='/pravda-network', className='example-name'),
                         html.A('paper', href='https://link.springer.com/chapter/10.1007/978-3-032-07715-8_8',
+                               target='_blank', className='example-paper-link')
+                    ], className='nav-dropdown-item example-item'),
+                    html.Div([
+                        dcc.Link('Think Tanks (.ru, .ca, .org)', href='/think-tanks', className='example-name'),
+                        html.A('paper', href='https://misinforeview.hks.harvard.edu/article/search-engine-manipulation-to-spread-pro-kremlin-propaganda/',
                                target='_blank', className='example-paper-link')
                     ], className='nav-dropdown-item example-item'),
                 ], className='nav-dropdown')
@@ -854,6 +861,7 @@ def load_example_graph(example_type):
         'high-profile': 'high_profile_news_network.pkl',
         'link-spam': 'link_spam.pkl',
         'pravda': 'pravda_network.pkl',
+        'think-tanks': 'think_tanks.pkl',
     }
 
     pickle_file = pickle_files.get(example_type)
