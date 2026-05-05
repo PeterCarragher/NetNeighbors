@@ -34,6 +34,25 @@ LARGE_GRAPH_EDGE_THRESHOLD = 20000
 SEED_COLOR = '#ff6b6b'
 DISCOVERED_COLOR = '#4ecdc4'
 
+# Hop color palette (index 0 = hop 1, index 1 = hop 2, etc.)
+HOP_COLORS = [
+    '#4ecdc4',  # hop 1 – teal
+    '#667eea',  # hop 2 – indigo
+    '#f9ca24',  # hop 3 – yellow
+    '#f0932b',  # hop 4 – orange
+    '#6ab04c',  # hop 5 – green
+    '#e056fd',  # hop 6 – purple
+    '#22a6b3',  # hop 7 – cyan
+    '#eb4d4b',  # hop 8 – red
+]
+
+
+def hop_color(hop: int) -> str:
+    """Return a color for the given hop number (1-indexed)."""
+    if hop <= 0:
+        return SEED_COLOR
+    return HOP_COLORS[(hop - 1) % len(HOP_COLORS)]
+
 # Regex for a well-formed domain
 DOMAIN_RE = re.compile(
     r'^(?!-)'
@@ -349,8 +368,20 @@ app.layout = html.Div([
                     selectedNodes=[],
                     width=None,  # Will be set by clientside callback
                     height=None,
-                    nodeColor=DISCOVERED_COLOR,
-                )
+                    nodeColor=SEED_COLOR,
+                ),
+                html.Div(id='graph-legend', children=[], style={
+                    'position': 'absolute',
+                    'bottom': '16px',
+                    'right': '16px',
+                    'background': 'rgba(255,255,255,0.92)',
+                    'border': '1px solid #ddd',
+                    'border-radius': '6px',
+                    'padding': '8px 12px',
+                    'font-size': '15px',
+                    'display': 'none',
+                    'z-index': '10',
+                }),
             ], id='graph-container', style={'flex': '1', 'position': 'relative'}),
 
         ], id='graph-wrapper'),
@@ -394,13 +425,9 @@ def sync_graph_data(nodes, links):
     nodes = nodes or []
     links = links or []
 
-    # Set node colors based on type
+    # Set node colors based on hop (0 = seed, 1+ = discovery hops)
     for node in nodes:
-        node_type = node.get('type', 'discovered')
-        if node_type in ('seed', 'casino', 'misinfo'):
-            node['color'] = SEED_COLOR
-        else:
-            node['color'] = DISCOVERED_COLOR
+        node['color'] = hop_color(node.get('hop', 0))
 
     # Determine mode based on graph size
     is_large = (len(nodes) > LARGE_GRAPH_NODE_THRESHOLD or
@@ -408,6 +435,79 @@ def sync_graph_data(nodes, links):
     mode = 'performance' if is_large else 'interactive'
 
     return nodes, links, mode
+
+
+# Legend: rebuild whenever nodes change
+@app.callback(
+    [Output('graph-legend', 'children'),
+     Output('graph-legend', 'style')],
+    Input('graph-nodes', 'data')
+)
+def update_legend(nodes):
+    base_style = {
+        'position': 'absolute',
+        'bottom': '16px',
+        'right': '16px',
+        'background': 'rgba(255,255,255,0.92)',
+        'border': '1px solid #ddd',
+        'border-radius': '6px',
+        'padding': '8px 12px',
+        'font-size': '15px',
+        'z-index': '10',
+    }
+
+    if not nodes:
+        return [], {**base_style, 'display': 'none'}
+
+    hops_present = sorted({n.get('hop', 0) for n in nodes})
+
+    def swatch(color):
+        return html.Span(style={
+            'display': 'inline-block',
+            'width': '11px',
+            'height': '11px',
+            'border-radius': '50%',
+            'background': color,
+            'margin-right': '7px',
+            'flex-shrink': '0',
+        })
+
+    rows = []
+    for hop in hops_present:
+        color = hop_color(hop)
+        label = 'seed' if hop == 0 else f'hop {hop}'
+        rows.append(html.Div(
+            [swatch(color), label],
+            id={'type': 'legend-item', 'index': hop},
+            n_clicks=0,
+            style={
+                'display': 'flex',
+                'align-items': 'center',
+                'margin-bottom': '4px',
+                'color': '#333',
+                'cursor': 'pointer',
+                'userSelect': 'none',
+            }
+        ))
+
+    return rows, {**base_style, 'display': 'block'}
+
+
+# Legend item click → select all nodes of that hop
+@app.callback(
+    Output('force-graph', 'selectedNodes', allow_duplicate=True),
+    Input({'type': 'legend-item', 'index': ALL}, 'n_clicks'),
+    State('graph-nodes', 'data'),
+    prevent_initial_call=True
+)
+def legend_select_hop(n_clicks_list, nodes):
+    ctx = callback_context
+    if not ctx.triggered or not any(n_clicks_list):
+        raise PreventUpdate
+    prop_id = ctx.triggered[0]['prop_id']
+    hop = json.loads(prop_id.rsplit('.', 1)[0])['index']
+    nodes = nodes or []
+    return [n['id'] for n in nodes if n.get('hop', 0) == hop]
 
 
 # Update domain list from nodes
@@ -838,4 +938,4 @@ def serve_example_routes():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8050))
     # use_reloader=False prevents double webgraph loading in debug mode
-    app.run(debug=True, use_reloader=False, host='0.0.0.0', port=port)
+    app.run(debug=True, use_reloader=False, host='0.0.0.0', port=port) #, dev_tools_ui=False, dev_tools_props_check=False)
