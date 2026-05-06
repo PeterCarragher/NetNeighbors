@@ -135,7 +135,7 @@ app = dash.Dash(__name__, assets_folder='assets', title='NetNeighbors', suppress
 # URL to example type mapping
 EXAMPLE_MAP = {
     '/link-spam-network': 'link-spam',
-    '/high-profile-news-network': 'high-profile',
+    '/high-profile-news-network': 'news-polarization',
     '/iranian-news-network': 'iranian',
     '/pravda-network': 'pravda',
     '/think-tanks': 'think-tanks',
@@ -143,7 +143,7 @@ EXAMPLE_MAP = {
 }
 EXAMPLE_NAMES = {
     'link-spam': 'Link Spam Network',
-    'high-profile': 'High-Profile News Network',
+    'news-polarization': 'News Polarization Network',
     'iranian': 'Iranian News Network',
     'pravda': 'Pravda Network',
     'think-tanks': 'Think Tanks',
@@ -181,7 +181,7 @@ app.layout = html.Div([
                                target='_blank', className='example-paper-link')
                     ], className='nav-dropdown-item example-item'),
                     html.Div([
-                        dcc.Link('High-Profile News', href='/high-profile-news-network', className='example-name'),
+                        dcc.Link('News Polarization', href='/high-profile-news-network', className='example-name'),
                         html.A('paper', href='https://ojs.aaai.org/index.php/ICWSM/article/view/31309',
                                target='_blank', className='example-paper-link')
                     ], className='nav-dropdown-item example-item'),
@@ -955,7 +955,7 @@ def load_example_graph(example_type):
     # Map example type to pickle file
     pickle_files = {
         'iranian': 'iranian_news_network.pkl',
-        'high-profile': 'high_profile_news_network.pkl',
+        'news-polarization': 'high_profile_news_network.pkl',
         'link-spam': 'link_spam.pkl',
         'pravda': 'pravda_network.pkl',
         'think-tanks': 'think_tanks.pkl',
