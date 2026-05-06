@@ -56,6 +56,13 @@ def hop_color(hop: int) -> str:
         return SEED_COLOR
     return HOP_COLORS[(hop - 1) % len(HOP_COLORS)]
 
+
+def _eye_icon(visible: bool) -> "html.I":
+    cls = 'fa-solid fa-eye' if visible else 'fa-solid fa-eye-slash'
+    color = '#555' if visible else '#bbb'
+    return html.I(className=cls, style={'font-size': '13px', 'color': color, 'pointer-events': 'none'})
+
+
 # Regex for a well-formed domain
 DOMAIN_RE = re.compile(
     r'^(?!-)'
@@ -130,7 +137,13 @@ webgraph = get_webgraph()
 explorer = GraphExplorer(webgraph=webgraph)
 
 # Initialize Dash app
-app = dash.Dash(__name__, assets_folder='assets', title='NetNeighbors', suppress_callback_exceptions=True)
+app = dash.Dash(
+    __name__,
+    assets_folder='assets',
+    title='NetNeighbors',
+    suppress_callback_exceptions=True,
+    external_stylesheets=['https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css'],
+)
 
 # URL to example type mapping
 EXAMPLE_MAP = {
@@ -150,6 +163,15 @@ EXAMPLE_NAMES = {
     'news-credibility': 'News Credibility Network',
 }
 
+# Node type labels to hide by default when an example is first loaded.
+# Matched case-insensitively against the node_type attribute.
+EXAMPLE_DEFAULT_HIDDEN_LABELS = {
+    'news-polarization': {'left', 'right', 'center'},
+    'news-credibility':  {'unknown', 'mixed'},
+    'iranian': {'reformist', 'neutral'},
+    'think-tanks': {'backlink'},
+}
+
 # ----- Layout -----
 app.layout = html.Div([
     # ===== Navbar =====
@@ -166,13 +188,8 @@ app.layout = html.Div([
                                target='_blank', className='example-paper-link')
                     ], className='nav-dropdown-item example-item'),
                     html.Div([
-                        dcc.Link('Pravda Network (.ru, .ua)', href='/pravda-network', className='example-name'),
-                        html.A('paper', href='https://link.springer.com/chapter/10.1007/978-3-032-07715-8_8',
-                               target='_blank', className='example-paper-link')
-                    ], className='nav-dropdown-item example-item'),
-                    html.Div([
-                        dcc.Link('Link Spam Network', href='/link-spam-network', className='example-name'),
-                        html.A('paper', href='https://dl.acm.org/doi/10.1145/3670410',
+                        dcc.Link('News Polarization', href='/high-profile-news-network', className='example-name'),
+                        html.A('paper', href='https://ojs.aaai.org/index.php/ICWSM/article/view/31309',
                                target='_blank', className='example-paper-link')
                     ], className='nav-dropdown-item example-item'),
                     html.Div([
@@ -181,13 +198,18 @@ app.layout = html.Div([
                                target='_blank', className='example-paper-link')
                     ], className='nav-dropdown-item example-item'),
                     html.Div([
-                        dcc.Link('News Polarization', href='/high-profile-news-network', className='example-name'),
-                        html.A('paper', href='https://ojs.aaai.org/index.php/ICWSM/article/view/31309',
+                        dcc.Link('Think Tanks (.ru, .ca, .org)', href='/think-tanks', className='example-name'),
+                        html.A('paper', href='https://link.springer.com/chapter/10.1007/978-3-032-07715-8_8',
                                target='_blank', className='example-paper-link')
                     ], className='nav-dropdown-item example-item'),
                     html.Div([
-                        dcc.Link('Think Tanks (.ru, .ca, .org)', href='/think-tanks', className='example-name'),
+                        dcc.Link('Pravda Network (.ru, .ua)', href='/pravda-network', className='example-name'),
                         html.A('paper', href='https://link.springer.com/chapter/10.1007/978-3-032-07715-8_8',
+                               target='_blank', className='example-paper-link')
+                    ], className='nav-dropdown-item example-item'),
+                    html.Div([
+                        dcc.Link('Link Spam Network', href='/link-spam-network', className='example-name'),
+                        html.A('paper', href='https://dl.acm.org/doi/10.1145/3670410',
                                target='_blank', className='example-paper-link')
                     ], className='nav-dropdown-item example-item'),
                 ], className='nav-dropdown')
@@ -431,6 +453,7 @@ app.layout = html.Div([
     dcc.Store(id='pending-example', data=None),
     dcc.Store(id='last-clicked-domain', data=None),
     dcc.Store(id='legend-labels', data={}),
+    dcc.Store(id='hidden-hops', data=[]),
     dcc.ConfirmDialog(id='confirm-dialog', message=''),
     dcc.ConfirmDialog(id='validation-report', message=''),
     dcc.ConfirmDialog(id='example-confirm', message=''),
@@ -456,34 +479,48 @@ app.layout = html.Div([
      Output('force-graph', 'mode'),
      Output('force-graph', 'selectedNodes', allow_duplicate=True)],
     [Input('graph-nodes', 'data'),
-     Input('graph-links', 'data')],
+     Input('graph-links', 'data'),
+     Input('hidden-hops', 'data')],
     prevent_initial_call=True
 )
-def sync_graph_data(nodes, links):
+def sync_graph_data(nodes, links, hidden_hops):
     nodes = nodes or []
     links = links or []
+    hidden_set = set(hidden_hops or [])
 
-    # Set node colors based on hop (0 = seed, 1+ = discovery hops)
+    # Set colors and filter hidden hops
+    visible_nodes = []
+    hidden_ids = set()
     for node in nodes:
-        node['color'] = hop_color(node.get('hop', 0))
+        node = {**node, 'color': hop_color(node.get('hop', 0))}
+        if node.get('hop', 0) in hidden_set:
+            hidden_ids.add(node['id'])
+        else:
+            visible_nodes.append(node)
 
-    # Determine mode based on graph size
-    is_large = (len(nodes) > LARGE_GRAPH_NODE_THRESHOLD or
-                len(links) > LARGE_GRAPH_EDGE_THRESHOLD)
+    visible_links = [
+        l for l in links
+        if l['source'] not in hidden_ids and l['target'] not in hidden_ids
+    ]
+
+    # Determine mode based on visible graph size
+    is_large = (len(visible_nodes) > LARGE_GRAPH_NODE_THRESHOLD or
+                len(visible_links) > LARGE_GRAPH_EDGE_THRESHOLD)
     mode = 'performance' if is_large else 'interactive'
 
     # no_update preserves whatever selectedNodes the client currently has
-    return nodes, links, mode, dash.no_update
+    return visible_nodes, visible_links, mode, dash.no_update
 
 
-# Legend: rebuild whenever nodes or stored labels change
+# Legend: rebuild whenever nodes, stored labels, or hidden-hops change
 @app.callback(
     [Output('graph-legend', 'children'),
      Output('graph-legend', 'style')],
-    Input('graph-nodes', 'data'),
+    [Input('graph-nodes', 'data'),
+     Input('hidden-hops', 'data')],
     State('legend-labels', 'data'),
 )
-def update_legend(nodes, legend_labels):
+def update_legend(nodes, hidden_hops, legend_labels):
     base_style = {
         'position': 'absolute',
         'bottom': '16px',
@@ -500,16 +537,33 @@ def update_legend(nodes, legend_labels):
     if not nodes:
         return [], {**base_style, 'display': 'none'}
 
+    # Collect all hops from the full node store (not just visible ones)
     hops_present = sorted({n.get('hop', 0) for n in nodes})
     legend_labels = legend_labels or {}
+    hidden_set = set(hidden_hops or [])
 
     rows = []
     for hop in hops_present:
         color = hop_color(hop)
         default_label = 'manual entry' if hop == -1 else ('seed' if hop == 0 else f'hop {hop}')
         label = legend_labels.get(str(hop), default_label)
+        is_hidden = hop in hidden_set
         rows.append(html.Div(
             [
+                # Eye toggle — click to show/hide nodes of this hop
+                html.Span(
+                    _eye_icon(not is_hidden),
+                    id={'type': 'legend-eye', 'index': hop},
+                    n_clicks=0,
+                    title='hide' if not is_hidden else 'show',
+                    style={
+                        'display': 'inline-flex',
+                        'align-items': 'center',
+                        'cursor': 'pointer',
+                        'margin-right': '5px',
+                        'flex-shrink': '0',
+                    }
+                ),
                 # Swatch — click to select all nodes of this hop
                 html.Span(
                     id={'type': 'legend-swatch', 'index': hop},
@@ -524,6 +578,7 @@ def update_legend(nodes, legend_labels):
                         'margin-right': '7px',
                         'flex-shrink': '0',
                         'cursor': 'pointer',
+                        'opacity': '0.3' if is_hidden else '1',
                     }
                 ),
                 # Label — click/double-click to rename
@@ -533,6 +588,7 @@ def update_legend(nodes, legend_labels):
                     type='text',
                     debounce=True,
                     className='legend-label-input',
+                    style={'opacity': '0.4' if is_hidden else '1'},
                 ),
             ],
             style={
@@ -560,6 +616,27 @@ def legend_select_hop(n_clicks_list, nodes):
     hop = json.loads(prop_id.rsplit('.', 1)[0])['index']
     nodes = nodes or []
     return [n['id'] for n in nodes if n.get('hop', 0) == hop]
+
+
+# Eye toggle → update hidden-hops store
+@app.callback(
+    Output('hidden-hops', 'data'),
+    Input({'type': 'legend-eye', 'index': ALL}, 'n_clicks'),
+    State('hidden-hops', 'data'),
+    prevent_initial_call=True
+)
+def toggle_hop_visibility(n_clicks_list, hidden_hops):
+    ctx = callback_context
+    if not ctx.triggered or not any(n_clicks_list):
+        raise PreventUpdate
+    prop_id = ctx.triggered[0]['prop_id']
+    hop = json.loads(prop_id.rsplit('.', 1)[0])['index']
+    hidden_set = set(hidden_hops or [])
+    if hop in hidden_set:
+        hidden_set.discard(hop)
+    else:
+        hidden_set.add(hop)
+    return list(hidden_set)
 
 
 # Legend label rename — persist to store when input blurs or Enter is pressed
@@ -944,7 +1021,8 @@ def confirm_example_load(submit_clicks, pending):
 @app.callback(
     [Output('graph-nodes', 'data', allow_duplicate=True),
      Output('graph-links', 'data', allow_duplicate=True),
-     Output('legend-labels', 'data', allow_duplicate=True)],
+     Output('legend-labels', 'data', allow_duplicate=True),
+     Output('hidden-hops', 'data', allow_duplicate=True)],
     Input('example-loading', 'data'),
     prevent_initial_call=True
 )
@@ -1021,7 +1099,16 @@ def load_example_graph(example_type):
         for src, tgt, _ in G.edges(data=True):
             links.append({'source': src, 'target': tgt})
 
-        return nodes, links, legend_labels
+        # Compute default hidden hops from per-example config
+        default_hidden_labels = {
+            s.lower() for s in EXAMPLE_DEFAULT_HIDDEN_LABELS.get(example_type, set())
+        }
+        initial_hidden_hops = [
+            hop for ntype, hop in type_to_hop.items()
+            if ntype.lower() in default_hidden_labels
+        ]
+
+        return nodes, links, legend_labels, initial_hidden_hops
 
     except Exception as e:
         print(f"Error loading example from {pickle_path}: {e}")
