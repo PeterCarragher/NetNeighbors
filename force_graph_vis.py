@@ -454,6 +454,10 @@ app.layout = html.Div([
     dcc.Store(id='last-clicked-domain', data=None),
     dcc.Store(id='legend-labels', data={}),
     dcc.Store(id='hidden-hops', data=[]),
+    dcc.Store(id='hop-colors', data={}),
+    # Off-screen bridge: JS writes "hop|||#color|||timestamp" here to trigger color callback
+    dcc.Input(id='color-pick-bridge', type='text', value='', debounce=False,
+              style={'position': 'fixed', 'top': '-200px', 'opacity': '0', 'pointer-events': 'none'}),
     dcc.ConfirmDialog(id='confirm-dialog', message=''),
     dcc.ConfirmDialog(id='validation-report', message=''),
     dcc.ConfirmDialog(id='example-confirm', message=''),
@@ -480,20 +484,24 @@ app.layout = html.Div([
      Output('force-graph', 'selectedNodes', allow_duplicate=True)],
     [Input('graph-nodes', 'data'),
      Input('graph-links', 'data'),
-     Input('hidden-hops', 'data')],
+     Input('hidden-hops', 'data'),
+     Input('hop-colors', 'data')],
     prevent_initial_call=True
 )
-def sync_graph_data(nodes, links, hidden_hops):
+def sync_graph_data(nodes, links, hidden_hops, hop_colors):
     nodes = nodes or []
     links = links or []
     hidden_set = set(hidden_hops or [])
+    hop_colors = hop_colors or {}
 
-    # Set colors and filter hidden hops
+    # Set colors (custom override or palette default) and filter hidden hops
     visible_nodes = []
     hidden_ids = set()
     for node in nodes:
-        node = {**node, 'color': hop_color(node.get('hop', 0))}
-        if node.get('hop', 0) in hidden_set:
+        hop = node.get('hop', 0)
+        color = hop_colors.get(str(hop)) or hop_color(hop)
+        node = {**node, 'color': color}
+        if hop in hidden_set:
             hidden_ids.add(node['id'])
         else:
             visible_nodes.append(node)
@@ -517,10 +525,11 @@ def sync_graph_data(nodes, links, hidden_hops):
     [Output('graph-legend', 'children'),
      Output('graph-legend', 'style')],
     [Input('graph-nodes', 'data'),
-     Input('hidden-hops', 'data')],
+     Input('hidden-hops', 'data'),
+     Input('hop-colors', 'data')],
     State('legend-labels', 'data'),
 )
-def update_legend(nodes, hidden_hops, legend_labels):
+def update_legend(nodes, hidden_hops, hop_colors, legend_labels):
     base_style = {
         'position': 'absolute',
         'bottom': '16px',
@@ -541,10 +550,11 @@ def update_legend(nodes, hidden_hops, legend_labels):
     hops_present = sorted({n.get('hop', 0) for n in nodes})
     legend_labels = legend_labels or {}
     hidden_set = set(hidden_hops or [])
+    hop_colors = hop_colors or {}
 
     rows = []
     for hop in hops_present:
-        color = hop_color(hop)
+        color = hop_colors.get(str(hop)) or hop_color(hop)
         default_label = 'manual entry' if hop == -1 else ('seed' if hop == 0 else f'hop {hop}')
         label = legend_labels.get(str(hop), default_label)
         is_hidden = hop in hidden_set
@@ -637,6 +647,25 @@ def toggle_hop_visibility(n_clicks_list, hidden_hops):
     else:
         hidden_set.add(hop)
     return list(hidden_set)
+
+
+# Color-pick bridge → update hop-colors store
+@app.callback(
+    Output('hop-colors', 'data'),
+    Input('color-pick-bridge', 'value'),
+    State('hop-colors', 'data'),
+    prevent_initial_call=True
+)
+def apply_color_pick(bridge_value, hop_colors):
+    if not bridge_value or '|||' not in bridge_value:
+        raise PreventUpdate
+    parts = bridge_value.split('|||')
+    if len(parts) < 2 or not parts[1].startswith('#'):
+        raise PreventUpdate
+    hop_str, color = parts[0], parts[1]
+    hop_colors = dict(hop_colors or {})
+    hop_colors[hop_str] = color
+    return hop_colors
 
 
 # Legend label rename — persist to store when input blurs or Enter is pressed
@@ -1022,7 +1051,8 @@ def confirm_example_load(submit_clicks, pending):
     [Output('graph-nodes', 'data', allow_duplicate=True),
      Output('graph-links', 'data', allow_duplicate=True),
      Output('legend-labels', 'data', allow_duplicate=True),
-     Output('hidden-hops', 'data', allow_duplicate=True)],
+     Output('hidden-hops', 'data', allow_duplicate=True),
+     Output('hop-colors', 'data', allow_duplicate=True)],
     Input('example-loading', 'data'),
     prevent_initial_call=True
 )
@@ -1108,7 +1138,7 @@ def load_example_graph(example_type):
             if ntype.lower() in default_hidden_labels
         ]
 
-        return nodes, links, legend_labels, initial_hidden_hops
+        return nodes, links, legend_labels, initial_hidden_hops, {}
 
     except Exception as e:
         print(f"Error loading example from {pickle_path}: {e}")
