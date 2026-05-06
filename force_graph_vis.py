@@ -363,6 +363,16 @@ app.layout = html.Div([
                     'border-radius': '5px',
                     'cursor': 'pointer',
                     'font-size': '13px',
+                    'marginRight': '10px',
+                }),
+                html.Button('show domain names', id='show-labels-btn', n_clicks=0, style={
+                    'padding': '8px 16px',
+                    'background': 'white',
+                    'color': '#444',
+                    'border': '2px solid #ddd',
+                    'border-radius': '5px',
+                    'cursor': 'pointer',
+                    'font-size': '13px',
                 }),
             ], id='control-panel', style={
                 'display': 'flex',
@@ -382,6 +392,7 @@ app.layout = html.Div([
                     width=None,  # Will be set by clientside callback
                     height=None,
                     nodeColor=SEED_COLOR,
+                    showNeighborLabels=False,
                 ),
                 html.Div(id='graph-legend', children=[], style={
                     'position': 'absolute',
@@ -612,6 +623,31 @@ app.clientside_callback(
      State('domain-search', 'value'),
      State('last-clicked-domain', 'data')],
     prevent_initial_call=True
+)
+
+
+# Show domain names toggle — updates button style and ForceGraph prop together
+app.clientside_callback(
+    """
+    function(n_clicks) {
+        var on = n_clicks % 2 === 1;
+        var style = {
+            padding: '8px 16px',
+            background: on ? '#eef2ff' : 'white',
+            color: on ? '#667eea' : '#444',
+            border: on ? '2px solid #667eea' : '2px solid #ddd',
+            borderRadius: '5px',
+            cursor: 'pointer',
+            fontSize: '13px',
+            fontWeight: on ? 'bold' : 'normal',
+        };
+        return [on, style];
+    }
+    """,
+    [Output('force-graph', 'showNeighborLabels'),
+     Output('show-labels-btn', 'style')],
+    Input('show-labels-btn', 'n_clicks'),
+    prevent_initial_call=True,
 )
 
 
