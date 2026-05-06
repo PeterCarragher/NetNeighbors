@@ -1,11 +1,11 @@
 """
-High-Profile News Network Analysis
+Think Tank Network Analysis
 
-Loads a list of high-profile news domains and finds all links
-between them. Unlike other examples, this does not discover
-external sites - it only maps connections within the given set.
+Loads a list of think-tank domains labelled by country and finds all links
+between them. Each country group gets its own legend entry in the visualiser.
 """
 
+import csv
 import os
 import pickle
 from typing import TYPE_CHECKING, Optional
@@ -23,6 +23,18 @@ if TYPE_CHECKING:
     import networkx as nx
 
 
+def load_domains_with_country(file_path: str) -> dict:
+    """Return {domain: country} from a two-column CSV with headers url,country."""
+    mapping = {}
+    with open(file_path, newline="", encoding="utf-8-sig") as f:
+        for row in csv.DictReader(f, skipinitialspace=True):
+            url = row["url"].strip()
+            country = row["country"].strip()
+            if url:
+                mapping[url] = country
+    return mapping
+
+
 def build_network(
     file_path: str = None,
     webgraph_dir: Optional[str] = None,
@@ -31,10 +43,10 @@ def build_network(
     wg=None,
 ) -> "nx.DiGraph":
     """
-    Build network of links between high-profile news domains.
+    Build network of links between think-tank domains, grouped by country.
 
     Args:
-        file_path: Path to domain list file. Defaults to example data.
+        file_path: Path to CSV file (url, country columns). Defaults to example data.
         webgraph_dir: Path to webgraph data files. Falls back to WEBGRAPH_DIR
             env var, then ~/.pyccwebgraph/data.
         webgraph_version: Webgraph version string. Falls back to WEBGRAPH_VERSION
@@ -44,30 +56,30 @@ def build_network(
 
     Returns:
         NetworkX DiGraph with:
-        - All input domains as nodes (is_seed=True)
+        - Think-tank domains as nodes, node_type set to their country label
+        - Backlink domains as nodes with node_type="backlink"
         - Edges representing links between the domains
     """
     if file_path is None:
         file_path = get_example_data_path("think_tanks.csv")
 
-    # Load domains
-    domains = load_domains(file_path)
+    domain_country = load_domains_with_country(file_path)
+    domains = list(domain_country.keys())
     print(f"Loaded {len(domains)} domains from {file_path}")
 
-    # Initialize webgraph (or use provided instance)
     wg = setup_webgraph(webgraph_dir, webgraph_version, auto_download, wg=wg)
 
-    # Validate domains
     valid_domains, _ = validate_domains(wg, domains)
 
-    # Get all links between these domains
     edges = wg.get_links_between(
         domains_from=valid_domains,
         domains_to=valid_domains,
     )
     print(f"Found {len(edges)} links between domains")
 
-    backlink_domains, _ = validate_domains(wg, load_domains(get_example_data_path("think_tank_backlinkers.csv")))
+    backlink_domains, _ = validate_domains(
+        wg, load_domains(get_example_data_path("think_tank_backlinkers.csv"))
+    )
 
     backlink_edges = wg.get_links_between(
         domains_from=backlink_domains,
@@ -75,20 +87,17 @@ def build_network(
     )
     print(f"Found {len(backlink_edges)} backlinks to valid domains")
 
-
-    # Build NetworkX graph
     nx = require_networkx()
     G = nx.DiGraph()
 
-    # Add all valid domains as seed nodes
     for domain in valid_domains:
-        G.add_node(domain, is_seed=True, node_type="seed")
+        country = domain_country.get(domain, "unknown")
+        G.add_node(domain, is_seed=True, node_type=country)
 
     for domain in backlink_domains:
         if domain not in G:
             G.add_node(domain, is_seed=False, node_type="backlink")
 
-    # Add edges
     G.add_edges_from(edges, edge_type="internal")
     G.add_edges_from(backlink_edges, edge_type="backlink")
 
@@ -98,8 +107,7 @@ def build_network(
 
 if __name__ == "__main__":
     G = build_network()
-    # dump to pickle file
-    
+
     os.makedirs("examples/pickle", exist_ok=True)
     with open("examples/pickle/think_tanks.pkl", "wb") as f:
         pickle.dump(G, f)

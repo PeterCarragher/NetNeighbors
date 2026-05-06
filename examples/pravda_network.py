@@ -73,7 +73,7 @@ def build_network(
 
     # Add all valid domains as seed nodes
     for domain in valid_domains:
-        G.add_node(domain, is_seed=True, node_type="seed")
+        G.add_node(domain, is_seed=True, node_type="pravda network")
 
     # Add edges
     G.add_edges_from(edges, edge_type="internal")

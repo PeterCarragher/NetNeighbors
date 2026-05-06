@@ -127,7 +127,7 @@ def build_network(
 
     for backlinker in shared_backlinkers:
         for casino in casino_edges.get(backlinker, []):
-            linked_casinos.add(casino)
+            linked_casinos.add(casino, )
         for misinfo in misinfo_edges.get(backlinker, []):
             linked_misinfo.add(misinfo)
 

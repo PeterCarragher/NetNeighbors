@@ -10,9 +10,10 @@ import os
 import pickle
 from typing import TYPE_CHECKING, Optional
 
+import pandas as pd
+
 from example_loader import (
     get_example_data_path,
-    load_domains,
     print_graph_summary,
     require_networkx,
     setup_webgraph,
@@ -52,10 +53,14 @@ def build_network(
         - External edges from discovered sites to seeds
     """
     if file_path is None:
-        file_path = get_example_data_path("iranian_news_domains.csv")
+        file_path = get_example_data_path("iranian_news_domains_labeled_v2.csv")
 
-    # Load domains
-    domains = load_domains(file_path)
+    df = pd.read_csv(file_path, encoding="utf-8-sig").dropna(subset=["url", "gpt_label"])
+    df["url"] = df["url"].str.strip()
+    df["gpt_label"] = df["gpt_label"].str.strip().str.lower()
+    df = df[df["gpt_label"].str.len() < 20]
+    domain_to_label = dict(zip(df["url"], df["gpt_label"]))
+    domains = list(domain_to_label.keys())
     print(f"Loaded {len(domains)} domains from {file_path}")
 
     # Initialize webgraph (or use provided instance)
@@ -84,7 +89,7 @@ def build_network(
 
     # Add seed nodes
     for domain in valid_domains:
-        G.add_node(domain, is_seed=True, node_type="seed")
+        G.add_node(domain, is_seed=True, node_type=domain_to_label.get(domain, "unknown"))
 
     # Add internal edges
     G.add_edges_from(internal_edges, edge_type="internal")
