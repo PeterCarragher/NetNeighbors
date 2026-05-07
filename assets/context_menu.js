@@ -198,16 +198,21 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // --- Delete key handler ---
+    // --- Delete key handler + 'i' label toggle hotkey ---
     document.addEventListener('keydown', function(e) {
-        if (e.key === 'Delete' || e.key === 'Backspace') {
-            // Don't trigger if user is typing in an input/textarea
-            var tag = document.activeElement && document.activeElement.tagName;
-            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+        var tag = document.activeElement && document.activeElement.tagName;
+        var inInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
 
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+            if (inInput) return;
             e.preventDefault();
             var btn = document.getElementById('delete-btn');
             if (btn) btn.click();
+        } else if (e.key === 'i' || e.key === 'I') {
+            if (inInput) return;
+            e.preventDefault();
+            var labelsBtn = document.getElementById('show-labels-btn');
+            if (labelsBtn) labelsBtn.click();
         }
     });
 
@@ -292,8 +297,8 @@ document.addEventListener('DOMContentLoaded', function() {
             _searchInput.style.background = 'rgba(231,76,60,0.18)';
             setTimeout(function() {
                 if (_searchInput) {
-                    _searchInput.style.borderColor = 'rgba(255,255,255,0.22)';
-                    _searchInput.style.background = 'rgba(55,55,55,0.62)';
+                    _searchInput.style.borderColor = 'transparent';
+                    _searchInput.style.background = 'transparent';
                 }
             }, 1500);
             // Show error message in dropdown
@@ -360,8 +365,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function closeSearch() {
         if (_searchInput) {
-            _searchInput.style.display = 'none';
             _searchInput.value = '';
+            _searchInput.style.background = 'background:rgba(55,55,55,0.22)';
+            _searchInput.style.borderColor = 'border:rgba(255,255,255,0.2) solid 1px';
         }
         hideSearchDropdown();
     }
@@ -504,10 +510,10 @@ document.addEventListener('DOMContentLoaded', function() {
         inputEl.type = 'text';
         inputEl.placeholder = 'search domains...';
         inputEl.style.cssText = [
-            'display:none',
+            'display:block',
             'width:240px',
-            'background:rgba(55,55,55,0.62)',
-            'border:1px solid rgba(255,255,255,0.22)',
+            'background:rgba(55,55,55,0.22)',
+            'border:rgba(255,255,255,0.12) solid 1px',
             'border-radius:5px',
             'color:#fff',
             'padding:6px 12px',
@@ -515,6 +521,7 @@ document.addEventListener('DOMContentLoaded', function() {
             'font-size:13px',
             'outline:none',
             'box-sizing:border-box',
+            'transition:background 0.18s,border-color 0.18s',
         ].join(';');
         // Placeholder colour via a stylesheet rule (can't set via inline style)
         var phStyle = document.createElement('style');
@@ -538,14 +545,15 @@ document.addEventListener('DOMContentLoaded', function() {
             }).observe(rootEl, { attributes: true, attributeFilter: ['class'] });
         })();
 
-        // Toggle the input open/closed
+        // Clicking the icon focuses the input
         toggleBtn.addEventListener('click', function() {
-            if (inputEl.style.display === 'block') {
-                closeSearch();
-            } else {
-                inputEl.style.display = 'block';
-                inputEl.focus();
-            }
+            inputEl.focus();
+        });
+
+        // Show active style on focus, reset to transparent on blur
+        inputEl.addEventListener('focus', function() {
+            inputEl.style.background = 'rgba(55,55,55,0.62)';
+            inputEl.style.borderColor = 'rgba(255,255,255,0.22)';
         });
 
         inputEl.addEventListener('input', showSearchResults);
@@ -578,13 +586,17 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         inputEl.addEventListener('blur', function() {
-            setTimeout(hideSearchDropdown, 150);
+            setTimeout(function() {
+                hideSearchDropdown();
+                inputEl.style.background = 'rgba(55,55,55,0.22)';
+                inputEl.style.borderColor = 'rgba(255,255,255,0.2) solid 1px';
+            }, 150);
         });
 
-        // Close on click outside the widget
+        // Close dropdown on click outside the widget (blur handles style reset)
         document.addEventListener('mousedown', function(e) {
-            if (inputEl.style.display === 'block' && !container.contains(e.target)) {
-                closeSearch();
+            if (!container.contains(e.target)) {
+                hideSearchDropdown();
             }
         });
     })();
