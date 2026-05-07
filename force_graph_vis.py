@@ -497,6 +497,8 @@ app.layout = html.Div([
     html.Span(id='_graph_nodes_cache', style={'display': 'none'}),
     # Sentinel: routes presenter-add-result changes into window._psHandleAddResult
     html.Span(id='_ps_add_result_sentinel', style={'display': 'none'}),
+    # Sentinel: hides loading cursor when heavy callbacks complete
+    html.Span(id='_loading_cursor_sentinel', style={'display': 'none'}),
     dcc.ConfirmDialog(id='confirm-dialog', message=''),
     dcc.ConfirmDialog(id='validation-report', message=''),
     dcc.ConfirmDialog(id='example-confirm', message=''),
@@ -629,6 +631,21 @@ app.clientside_callback(
     Output('_graph_nodes_cache', 'children'),
     [Input('graph-nodes', 'data'),
      Input('hidden-hops', 'data')],
+)
+
+
+# Hide loading cursor when discover or presenter-add callbacks complete
+app.clientside_callback(
+    """
+    function(nodes, result) {
+        if (typeof window._hideLoadingCursor === 'function') window._hideLoadingCursor();
+        return '';
+    }
+    """,
+    Output('_loading_cursor_sentinel', 'children'),
+    [Input('graph-nodes', 'data'),
+     Input('presenter-add-result', 'value')],
+    prevent_initial_call=True,
 )
 
 

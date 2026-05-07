@@ -211,6 +211,72 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
+    // --- Loading cursor (FA spinner that follows the mouse) ---
+    var _cursorX = window.innerWidth / 2;
+    var _cursorY = window.innerHeight / 2;
+    var _loadingEl = null;
+    var _loadingTimer = null;
+
+    // Inject the keyframe once so the inline animation works on dynamically created elements.
+    // We do NOT rely on fa-spin because FA's CSS may not apply to imperatively-created nodes.
+    (function() {
+        var s = document.createElement('style');
+        s.textContent = '@keyframes _lc_spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}';
+        document.head.appendChild(s);
+    })();
+
+    document.addEventListener('mousemove', function(e) {
+        _cursorX = e.clientX;
+        _cursorY = e.clientY;
+        if (_loadingEl && _loadingEl.style.display !== 'none') {
+            _loadingEl.style.left = _cursorX + 'px';
+            _loadingEl.style.top  = _cursorY + 'px';
+        }
+    });
+
+    window._showLoadingCursor = function() {
+        if (!_loadingEl) {
+            _loadingEl = document.createElement('div');
+            _loadingEl.style.cssText = [
+                'position:fixed',
+                'pointer-events:none',
+                'z-index:999999',
+                'display:none',
+                'font-size:18px',
+                'color:#667eea',
+                'transform:translate(-50%,-50%)',
+                'line-height:1',
+            ].join(';');
+            var icon = document.createElement('i');
+            icon.className = 'fa-solid fa-circle-notch fa-2x';
+            icon.style.cssText = 'display:inline-block;animation:_lc_spin 0.75s linear infinite;';
+            _loadingEl.appendChild(icon);
+            document.body.appendChild(_loadingEl);
+        }
+        _loadingEl.style.left = _cursorX + 'px';
+        _loadingEl.style.top  = _cursorY + 'px';
+        _loadingEl.style.display = 'block';
+        document.body.style.cursor = 'none';
+        // Safety: auto-hide after 60 s in case the callback never fires
+        if (_loadingTimer) clearTimeout(_loadingTimer);
+        _loadingTimer = setTimeout(window._hideLoadingCursor, 60000);
+    };
+
+    window._hideLoadingCursor = function() {
+        if (_loadingTimer) { clearTimeout(_loadingTimer); _loadingTimer = null; }
+        if (_loadingEl) _loadingEl.style.display = 'none';
+        document.body.style.cursor = '';
+    };
+
+    // Show on discover-btn click (event delegation — safe even if btn re-renders)
+    document.addEventListener('click', function(e) {
+        var t = e.target;
+        while (t && t !== document.body) {
+            if (t.id === 'discover-btn') { window._showLoadingCursor(); break; }
+            t = t.parentElement;
+        }
+    });
+
     // --- Presenter search: built entirely in vanilla JS so React never touches it ---
 
     // Called by clientside callback when presenter-add-result changes.
@@ -317,6 +383,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function addNewDomain(domain) {
         writeBridge('presenter-add-bridge', domain);
+        window._showLoadingCursor();
         closeSearch();
     }
 
