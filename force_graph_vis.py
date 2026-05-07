@@ -483,10 +483,14 @@ app.layout = html.Div([
     # Off-screen bridge: JS writes "hop|||#color|||timestamp" here to trigger color callback
     dcc.Input(id='color-pick-bridge', type='text', value='', debounce=False,
               style={'position': 'fixed', 'top': '-200px', 'opacity': '0', 'pointer-events': 'none'}),
-    # Off-screen bridge: JS writes "nodeId|||timestamp" here to trigger presenter-search selection
+    # Off-screen bridges for presenter search
+    # select: "nodeId|||timestamp" or "nodeId|||hop|||timestamp" (3 parts = unhide hop first)
     dcc.Input(id='presenter-select-bridge', type='text', value='', debounce=False,
               style={'position': 'fixed', 'top': '-200px', 'opacity': '0', 'pointer-events': 'none'}),
-    # Hidden span used by clientside callback to push graph-nodes into window._graphNodes for JS use
+    # add: "domain|||timestamp" — validate + add + discover
+    dcc.Input(id='presenter-add-bridge', type='text', value='', debounce=False,
+              style={'position': 'fixed', 'top': '-200px', 'opacity': '0', 'pointer-events': 'none'}),
+    # Hidden span: clientside callback pushes graph-nodes + hidden-hops into JS globals
     html.Span(id='_graph_nodes_cache', style={'display': 'none'}),
     dcc.ConfirmDialog(id='confirm-dialog', message=''),
     dcc.ConfirmDialog(id='validation-report', message=''),
@@ -608,33 +612,84 @@ app.clientside_callback(
 
 
 
-# Keep window._graphNodes in sync so the presenter search dropdown JS can access nodes
+# Keep JS globals in sync: window._graphNodes and window._hiddenHops
 app.clientside_callback(
     """
-    function(nodes) {
+    function(nodes, hidden_hops) {
         window._graphNodes = nodes || [];
+        window._hiddenHops = new Set((hidden_hops || []).map(Number));
         return '';
     }
     """,
     Output('_graph_nodes_cache', 'children'),
-    Input('graph-nodes', 'data'),
+    [Input('graph-nodes', 'data'),
+     Input('hidden-hops', 'data')],
 )
 
 
-# Presenter search: bridge write from JS dropdown selection → selectedNodes
-app.clientside_callback(
-    """
-    function(bridge_value) {
-        if (!bridge_value || bridge_value.indexOf('|||') < 0)
-            return window.dash_clientside.no_update;
-        var nodeId = bridge_value.split('|||')[0];
-        return [nodeId];
-    }
-    """,
-    Output('force-graph', 'selectedNodes', allow_duplicate=True),
+# Presenter search select bridge:
+# 2-part value "nodeId|||timestamp"        → select visible node
+# 3-part value "nodeId|||hop|||timestamp"  → unhide hop then select node
+@app.callback(
+    [Output('force-graph', 'selectedNodes', allow_duplicate=True),
+     Output('hidden-hops', 'data', allow_duplicate=True)],
     Input('presenter-select-bridge', 'value'),
+    State('hidden-hops', 'data'),
     prevent_initial_call=True,
 )
+def presenter_select_node(bridge_value, hidden_hops):
+    if not bridge_value or '|||' not in bridge_value:
+        raise PreventUpdate
+    parts = bridge_value.split('|||')
+    node_id = parts[0]
+    hidden_set = set(hidden_hops or [])
+    if len(parts) >= 3:
+        try:
+            hidden_set.discard(int(parts[1]))
+        except (ValueError, IndexError):
+            pass
+    return [node_id], list(hidden_set)
+
+
+# Presenter search add bridge: validate domain → add to graph → link to existing nodes
+@app.callback(
+    [Output('graph-nodes', 'data', allow_duplicate=True),
+     Output('graph-links', 'data', allow_duplicate=True),
+     Output('force-graph', 'selectedNodes', allow_duplicate=True)],
+    Input('presenter-add-bridge', 'value'),
+    [State('graph-nodes', 'data'),
+     State('graph-links', 'data')],
+    prevent_initial_call=True,
+)
+def presenter_add_domain(bridge_value, current_nodes, current_links):
+    if not bridge_value or '|||' not in bridge_value:
+        raise PreventUpdate
+    domain = bridge_value.split('|||')[0].strip().lower()
+    if not DOMAIN_RE.match(domain):
+        raise PreventUpdate
+
+    in_cc, _ = webgraph.validate_seeds([domain])
+    if not in_cc:
+        raise PreventUpdate
+
+    current_nodes = list(current_nodes or [])
+    current_links = list(current_links or [])
+    existing_ids = {n['id'] for n in current_nodes}
+
+    if domain not in existing_ids:
+        current_nodes.append({'id': domain, 'label': domain, 'type': 'manual', 'hop': -1, 'connections': 0})
+        existing_ids.add(domain)
+
+    # Find all edges between the new domain and every node already in the graph
+    all_ids = list(existing_ids)
+    new_edges = webgraph.get_links_between(domains_from=all_ids, domains_to=all_ids)
+    existing_link_set = {(l['source'], l['target']) for l in current_links}
+    for src, tgt in new_edges:
+        if (src, tgt) not in existing_link_set:
+            current_links.append({'source': src, 'target': tgt})
+            existing_link_set.add((src, tgt))
+
+    return current_nodes, current_links, [domain]
 
 
 # Legend: rebuild whenever nodes, stored labels, or hidden-hops change

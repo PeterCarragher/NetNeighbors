@@ -249,61 +249,107 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function closeSearch() {
-        if (_searchInput) _searchInput.style.display = 'none';
-        _searchInput && (_searchInput.value = '');
+        if (_searchInput) {
+            _searchInput.style.display = 'none';
+            _searchInput.value = '';
+        }
         hideSearchDropdown();
     }
 
-    function selectSearchNode(nodeId) {
-        var bridge = document.getElementById('presenter-select-bridge');
-        if (bridge) {
-            var setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-            setter.call(bridge, nodeId + '|||' + Date.now());
-            bridge.dispatchEvent(new Event('input', { bubbles: true }));
-        }
+    function writeBridge(id, value) {
+        var bridge = document.getElementById(id);
+        if (!bridge) return;
+        var setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+        setter.call(bridge, value + '|||' + Date.now());
+        bridge.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
+    function selectSearchNode(nodeId, hop, isHidden) {
+        // 3-part bridge value tells Dash to unhide the hop before selecting
+        var value = isHidden ? nodeId + '|||' + hop : nodeId;
+        writeBridge('presenter-select-bridge', value);
+        closeSearch();
+    }
+
+    function addNewDomain(domain) {
+        writeBridge('presenter-add-bridge', domain);
         closeSearch();
     }
 
     function showSearchResults() {
         var inputEl = _searchInput;
         if (!inputEl) return;
-        var q = (inputEl.value || '').trim().toLowerCase();
+        var raw = (inputEl.value || '').trim();
+        var q = raw.toLowerCase();
         if (!q) { hideSearchDropdown(); return; }
 
         var nodes = window._graphNodes || [];
+        var hiddenHops = window._hiddenHops || new Set();
         var matches = [];
         for (var i = 0; i < nodes.length && matches.length < 3; i++) {
             var n = nodes[i];
             if ((n.id || '').toLowerCase().indexOf(q) >= 0 ||
                     (n.label || '').toLowerCase().indexOf(q) >= 0) {
-                matches.push(n.id);
+                matches.push({ id: n.id, hop: n.hop, hidden: hiddenHops.has(n.hop) });
             }
         }
 
         var d = getSearchDropdown();
         d.innerHTML = '';
-        if (!matches.length) { d.style.display = 'none'; return; }
 
-        matches.forEach(function(nodeId, idx) {
-            var item = document.createElement('div');
-            item.textContent = nodeId;
-            item.style.cssText = [
+        if (!matches.length) {
+            // Show hint to add as new domain
+            var hint = document.createElement('div');
+            hint.textContent = 'add "' + raw + '" to graph (Enter)';
+            hint.style.cssText = [
                 'padding:8px 14px',
-                'color:rgba(255,255,255,0.9)',
+                'color:rgba(255,255,255,0.45)',
                 "font-family:'Space Mono',monospace",
-                'font-size:12px',
+                'font-size:11px',
                 'cursor:pointer',
-                'white-space:nowrap',
-                'overflow:hidden',
-                'text-overflow:ellipsis',
+                'font-style:italic',
             ].join(';');
-            item.addEventListener('mouseover', function() { setDropdownHighlight(idx); });
-            item.addEventListener('mousedown', function(e) {
-                e.preventDefault();
-                selectSearchNode(nodeId);
+            hint.addEventListener('mouseover', function() { hint.style.color = 'rgba(255,255,255,0.8)'; });
+            hint.addEventListener('mouseout',  function() { hint.style.color = 'rgba(255,255,255,0.45)'; });
+            hint.addEventListener('mousedown', function(e) { e.preventDefault(); addNewDomain(raw); });
+            d.appendChild(hint);
+        } else {
+            matches.forEach(function(match, idx) {
+                var item = document.createElement('div');
+                item.style.cssText = [
+                    'padding:8px 14px',
+                    match.hidden ? 'color:rgba(255,255,255,0.45)' : 'color:rgba(255,255,255,0.9)',
+                    "font-family:'Space Mono',monospace",
+                    'font-size:12px',
+                    'cursor:pointer',
+                    'white-space:nowrap',
+                    'overflow:hidden',
+                    'text-overflow:ellipsis',
+                    'display:flex',
+                    'align-items:center',
+                    'gap:6px',
+                ].join(';');
+
+                if (match.hidden) {
+                    var icon = document.createElement('i');
+                    icon.className = 'fa-solid fa-eye-slash';
+                    icon.style.cssText = 'font-size:10px;flex-shrink:0;pointer-events:none;';
+                    item.appendChild(icon);
+                }
+                var label = document.createElement('span');
+                label.textContent = match.id;
+                label.style.overflow = 'hidden';
+                label.style.textOverflow = 'ellipsis';
+                item.appendChild(label);
+
+                item.addEventListener('mouseover', function() { setDropdownHighlight(idx); });
+                item.addEventListener('mousedown', function(e) {
+                    e.preventDefault();
+                    selectSearchNode(match.id, match.hop, match.hidden);
+                });
+                d.appendChild(item);
             });
-            d.appendChild(item);
-        });
+        }
 
         var rect = inputEl.getBoundingClientRect();
         d.style.left = rect.left + 'px';
@@ -394,18 +440,27 @@ document.addEventListener('DOMContentLoaded', function() {
         inputEl.addEventListener('input', showSearchResults);
 
         inputEl.addEventListener('keydown', function(e) {
-            var items = getSearchDropdown().children;
+            var d = getSearchDropdown();
+            var items = d.children;
             if (e.key === 'ArrowDown') {
                 e.preventDefault();
-                setDropdownHighlight(Math.min(_searchHighlightIdx + 1, items.length - 1));
+                // skip the hint row (only 1 child = no-results hint, not navigable)
+                if (items.length > 1) setDropdownHighlight(Math.min(_searchHighlightIdx + 1, items.length - 1));
             } else if (e.key === 'ArrowUp') {
                 e.preventDefault();
-                setDropdownHighlight(Math.max(_searchHighlightIdx - 1, 0));
+                if (items.length > 1) setDropdownHighlight(Math.max(_searchHighlightIdx - 1, 0));
             } else if (e.key === 'Enter') {
                 e.preventDefault();
+                var raw = (inputEl.value || '').trim();
+                if (!raw) return;
+                // No-results case: hint row is the only child — add domain
+                if (items.length === 1 && d.style.display === 'block' && _searchHighlightIdx < 0) {
+                    addNewDomain(raw);
+                    return;
+                }
                 var idx = _searchHighlightIdx >= 0 ? _searchHighlightIdx : 0;
-                var node = items[idx];
-                if (node) selectSearchNode(node.textContent);
+                var item = items[idx];
+                if (item) item.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
             } else if (e.key === 'Escape') {
                 closeSearch();
             }
