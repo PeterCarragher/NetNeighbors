@@ -724,18 +724,31 @@ def update_legend(nodes, hidden_hops, hop_colors, legend_labels):
     hidden_set = set(hidden_hops or [])
     hop_colors = hop_colors or {}
 
-    rows = []
+    def default_label_for(hop):
+        if hop == -1: return 'manual entry'
+        if hop == 0: return 'seed'
+        return f'hop {hop}'
+
+    # Group hops by their current label — same label → merged legend row
+    label_to_hops = {}
     for hop in hops_present:
-        color = hop_colors.get(str(hop)) or hop_color(hop)
-        default_label = 'manual entry' if hop == -1 else ('seed' if hop == 0 else f'hop {hop}')
-        label = legend_labels.get(str(hop), default_label)
-        is_hidden = hop in hidden_set
+        label = legend_labels.get(str(hop), default_label_for(hop))
+        label_to_hops.setdefault(label, []).append(hop)
+
+    rows = []
+    for label, hops_in_group in label_to_hops.items():
+        # Use first hop's color (all hops share a color after a merge)
+        color = hop_colors.get(str(hops_in_group[0])) or hop_color(hops_in_group[0])
+        # Compound index: "3" for single hop, "0,2" for merged group
+        index = ','.join(str(h) for h in hops_in_group)
+        # Group is "hidden" only when every hop in it is hidden
+        is_hidden = all(h in hidden_set for h in hops_in_group)
         rows.append(html.Div(
             [
-                # Eye toggle — click to show/hide nodes of this hop
+                # Eye toggle — click to show/hide all hops in this group
                 html.Span(
                     _eye_icon(not is_hidden),
-                    id={'type': 'legend-eye', 'index': hop},
+                    id={'type': 'legend-eye', 'index': index},
                     n_clicks=0,
                     title='hide' if not is_hidden else 'show',
                     style={
@@ -746,9 +759,9 @@ def update_legend(nodes, hidden_hops, hop_colors, legend_labels):
                         'flex-shrink': '0',
                     }
                 ),
-                # Swatch — click to select all nodes of this hop
+                # Swatch — click to select all nodes in this group
                 html.Span(
-                    id={'type': 'legend-swatch', 'index': hop},
+                    id={'type': 'legend-swatch', 'index': index},
                     n_clicks=0,
                     title='click to select all',
                     style={
@@ -765,7 +778,7 @@ def update_legend(nodes, hidden_hops, hop_colors, legend_labels):
                 ),
                 # Label — click/double-click to rename
                 dcc.Input(
-                    id={'type': 'legend-label', 'index': hop},
+                    id={'type': 'legend-label', 'index': index},
                     value=label,
                     type='text',
                     debounce=True,
@@ -783,7 +796,7 @@ def update_legend(nodes, hidden_hops, hop_colors, legend_labels):
     return rows, {**base_style, 'display': 'block'}
 
 
-# Swatch click → select all nodes of that hop
+# Swatch click → select all nodes of that hop group
 @app.callback(
     Output('force-graph', 'selectedNodes', allow_duplicate=True),
     Input({'type': 'legend-swatch', 'index': ALL}, 'n_clicks'),
@@ -795,9 +808,10 @@ def legend_select_hop(n_clicks_list, nodes):
     if not ctx.triggered or not any(n_clicks_list):
         raise PreventUpdate
     prop_id = ctx.triggered[0]['prop_id']
-    hop = json.loads(prop_id.rsplit('.', 1)[0])['index']
+    index_str = str(json.loads(prop_id.rsplit('.', 1)[0])['index'])
+    hops = {int(h) for h in index_str.split(',')}
     nodes = nodes or []
-    return [n['id'] for n in nodes if n.get('hop', 0) == hop]
+    return [n['id'] for n in nodes if n.get('hop', 0) in hops]
 
 
 # Eye toggle → update hidden-hops store
@@ -812,16 +826,21 @@ def toggle_hop_visibility(n_clicks_list, hidden_hops):
     if not ctx.triggered or not any(n_clicks_list):
         raise PreventUpdate
     prop_id = ctx.triggered[0]['prop_id']
-    hop = json.loads(prop_id.rsplit('.', 1)[0])['index']
+    index_str = str(json.loads(prop_id.rsplit('.', 1)[0])['index'])
+    hops = [int(h) for h in index_str.split(',')]
     hidden_set = set(hidden_hops or [])
-    if hop in hidden_set:
-        hidden_set.discard(hop)
+    all_hidden = all(h in hidden_set for h in hops)
+    if all_hidden:
+        for h in hops:
+            hidden_set.discard(h)
     else:
-        hidden_set.add(hop)
+        for h in hops:
+            hidden_set.add(h)
     return list(hidden_set)
 
 
 # Color-pick bridge → update hop-colors store
+# Supports compound index: "0,2|||#color|||timestamp" sets color for hops 0 and 2
 @app.callback(
     Output('hop-colors', 'data'),
     Input('color-pick-bridge', 'value'),
@@ -836,29 +855,61 @@ def apply_color_pick(bridge_value, hop_colors):
         raise PreventUpdate
     hop_str, color = parts[0], parts[1]
     hop_colors = dict(hop_colors or {})
-    hop_colors[hop_str] = color
+    for h in hop_str.split(','):
+        hop_colors[h.strip()] = color
     return hop_colors
 
 
-# Legend label rename — persist to store when input blurs or Enter is pressed
+# Legend label rename — persist to store; merges groups when label matches another entry
 @app.callback(
-    Output('legend-labels', 'data'),
+    [Output('legend-labels', 'data'),
+     Output('hop-colors', 'data', allow_duplicate=True)],
     Input({'type': 'legend-label', 'index': ALL}, 'value'),
-    State('legend-labels', 'data'),
+    [State('legend-labels', 'data'),
+     State('hop-colors', 'data'),
+     State('graph-nodes', 'data')],
     prevent_initial_call=True
 )
-def save_legend_label(values, current_labels):
+def save_legend_label(values, current_labels, hop_colors, nodes):
     ctx = callback_context
     if not ctx.triggered:
         raise PreventUpdate
     current_labels = dict(current_labels or {})
+    hop_colors = dict(hop_colors or {})
     prop_id = ctx.triggered[0]['prop_id']
-    hop = json.loads(prop_id.rsplit('.', 1)[0])['index']
+    index_str = str(json.loads(prop_id.rsplit('.', 1)[0])['index'])
+    hops = [int(h) for h in index_str.split(',')]
     value = ctx.triggered[0]['value']
     if value is None:
         raise PreventUpdate
-    current_labels[str(hop)] = value
-    return current_labels
+
+    for h in hops:
+        current_labels[str(h)] = value
+
+    # Check if the new label matches any other hop's label (merge detection)
+    all_hops = {n.get('hop', 0) for n in (nodes or [])}
+
+    def default_label_for(hop):
+        if hop == -1: return 'manual entry'
+        if hop == 0: return 'seed'
+        return f'hop {hop}'
+
+    matched_hop = None
+    for candidate in sorted(all_hops):
+        if candidate in hops:
+            continue
+        candidate_label = current_labels.get(str(candidate), default_label_for(candidate))
+        if candidate_label == value:
+            matched_hop = candidate
+            break
+
+    if matched_hop is not None:
+        # Adopt the matched hop's color so both groups share the same visual
+        merged_color = hop_colors.get(str(matched_hop)) or hop_color(matched_hop)
+        for h in hops:
+            hop_colors[str(h)] = merged_color
+
+    return current_labels, hop_colors
 
 
 # Update domain list from nodes
