@@ -490,8 +490,13 @@ app.layout = html.Div([
     # add: "domain|||timestamp" — validate + add + discover
     dcc.Input(id='presenter-add-bridge', type='text', value='', debounce=False,
               style={'position': 'fixed', 'top': '-200px', 'opacity': '0', 'pointer-events': 'none'}),
+    # result: "ok|||domain|||ts", "not_found|||domain|||ts", or "invalid|||domain|||ts"
+    dcc.Input(id='presenter-add-result', type='text', value='', debounce=False,
+              style={'position': 'fixed', 'top': '-200px', 'opacity': '0', 'pointer-events': 'none'}),
     # Hidden span: clientside callback pushes graph-nodes + hidden-hops into JS globals
     html.Span(id='_graph_nodes_cache', style={'display': 'none'}),
+    # Sentinel: routes presenter-add-result changes into window._psHandleAddResult
+    html.Span(id='_ps_add_result_sentinel', style={'display': 'none'}),
     dcc.ConfirmDialog(id='confirm-dialog', message=''),
     dcc.ConfirmDialog(id='validation-report', message=''),
     dcc.ConfirmDialog(id='example-confirm', message=''),
@@ -627,6 +632,22 @@ app.clientside_callback(
 )
 
 
+# Route presenter-add-result → window._psHandleAddResult for visual feedback
+app.clientside_callback(
+    """
+    function(result) {
+        if (result && typeof window._psHandleAddResult === 'function') {
+            window._psHandleAddResult(result);
+        }
+        return '';
+    }
+    """,
+    Output('_ps_add_result_sentinel', 'children'),
+    Input('presenter-add-result', 'value'),
+    prevent_initial_call=True,
+)
+
+
 # Presenter search select bridge:
 # 2-part value "nodeId|||timestamp"        → select visible node
 # 3-part value "nodeId|||hop|||timestamp"  → unhide hop then select node
@@ -655,30 +676,43 @@ def presenter_select_node(bridge_value, hidden_hops):
 @app.callback(
     [Output('graph-nodes', 'data', allow_duplicate=True),
      Output('graph-links', 'data', allow_duplicate=True),
-     Output('force-graph', 'selectedNodes', allow_duplicate=True)],
+     Output('force-graph', 'selectedNodes', allow_duplicate=True),
+     Output('legend-labels', 'data', allow_duplicate=True),
+     Output('presenter-add-result', 'value')],
     Input('presenter-add-bridge', 'value'),
     [State('graph-nodes', 'data'),
-     State('graph-links', 'data')],
+     State('graph-links', 'data'),
+     State('legend-labels', 'data')],
     prevent_initial_call=True,
 )
-def presenter_add_domain(bridge_value, current_nodes, current_links):
+def presenter_add_domain(bridge_value, current_nodes, current_links, legend_labels):
     if not bridge_value or '|||' not in bridge_value:
         raise PreventUpdate
-    domain = bridge_value.split('|||')[0].strip().lower()
+    parts = bridge_value.split('|||')
+    domain = parts[0].strip().lower()
+    ts = parts[-1]  # original timestamp from JS, kept for result uniqueness
+
     if not DOMAIN_RE.match(domain):
-        raise PreventUpdate
+        return dash.no_update, dash.no_update, dash.no_update, dash.no_update, f'invalid|||{domain}|||{ts}'
 
     in_cc, _ = webgraph.validate_seeds([domain])
     if not in_cc:
-        raise PreventUpdate
+        return dash.no_update, dash.no_update, dash.no_update, dash.no_update, f'not_found|||{domain}|||{ts}'
 
     current_nodes = list(current_nodes or [])
     current_links = list(current_links or [])
+    legend_labels = dict(legend_labels or {})
     existing_ids = {n['id'] for n in current_nodes}
 
     if domain not in existing_ids:
-        current_nodes.append({'id': domain, 'label': domain, 'type': 'manual', 'hop': -1, 'connections': 0})
+        # Pick the next hop number above the highest one already in the graph.
+        # Using max-from-nodes (not explorer.hop_counter) avoids collisions when
+        # an example loaded its own hop assignments without touching the counter.
+        existing_hops = {n.get('hop', 0) for n in current_nodes}
+        new_hop = max(existing_hops | {0}) + 1
+        current_nodes.append({'id': domain, 'label': domain, 'type': 'manual', 'hop': new_hop, 'connections': 0})
         existing_ids.add(domain)
+        legend_labels[str(new_hop)] = domain
 
     # Find all edges between the new domain and every node already in the graph
     all_ids = list(existing_ids)
@@ -689,7 +723,7 @@ def presenter_add_domain(bridge_value, current_nodes, current_links):
             current_links.append({'source': src, 'target': tgt})
             existing_link_set.add((src, tgt))
 
-    return current_nodes, current_links, [domain]
+    return current_nodes, current_links, [domain], legend_labels, f'ok|||{domain}|||{ts}'
 
 
 # Legend: rebuild whenever nodes, stored labels, or hidden-hops change

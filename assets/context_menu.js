@@ -212,6 +212,50 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // --- Presenter search: built entirely in vanilla JS so React never touches it ---
+
+    // Called by clientside callback when presenter-add-result changes.
+    // Shows a red flash + "not found" hint in the dropdown for failed adds.
+    window._psHandleAddResult = function(result) {
+        if (!result || !_searchInput) return;
+        var parts = result.split('|||');
+        var status = parts[0];
+        var domain = parts[1] || '';
+        if (status === 'not_found' || status === 'invalid') {
+            // Flash input red
+            _searchInput.style.borderColor = 'rgba(231,76,60,0.85)';
+            _searchInput.style.background = 'rgba(231,76,60,0.18)';
+            setTimeout(function() {
+                if (_searchInput) {
+                    _searchInput.style.borderColor = 'rgba(255,255,255,0.22)';
+                    _searchInput.style.background = 'rgba(55,55,55,0.62)';
+                }
+            }, 1500);
+            // Show error message in dropdown
+            var d = getSearchDropdown();
+            d.innerHTML = '';
+            var errEl = document.createElement('div');
+            errEl.textContent = status === 'invalid'
+                ? '"' + domain + '" is not a valid domain'
+                : '"' + domain + '" not found in CommonCrawl';
+            errEl.style.cssText = [
+                'padding:8px 14px',
+                'color:rgba(231,76,60,0.9)',
+                "font-family:'Space Mono',monospace",
+                'font-size:11px',
+                'font-style:italic',
+            ].join(';');
+            d.appendChild(errEl);
+            d.style.display = 'block';
+            if (_searchInput) {
+                var rect = _searchInput.getBoundingClientRect();
+                d.style.left = rect.left + 'px';
+                d.style.top = (rect.bottom + 4) + 'px';
+                d.style.minWidth = rect.width + 'px';
+            }
+            setTimeout(function() { hideSearchDropdown(); }, 2500);
+        }
+    };
+
     var _searchDropdown = null;
     var _searchHighlightIdx = -1;
     var _searchInput = null;   // set once widget is created
