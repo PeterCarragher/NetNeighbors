@@ -210,4 +210,216 @@ document.addEventListener('DOMContentLoaded', function() {
             if (btn) btn.click();
         }
     });
+
+    // --- Presenter search: built entirely in vanilla JS so React never touches it ---
+    var _searchDropdown = null;
+    var _searchHighlightIdx = -1;
+    var _searchInput = null;   // set once widget is created
+
+    function getSearchDropdown() {
+        if (_searchDropdown) return _searchDropdown;
+        var d = document.createElement('div');
+        d.style.cssText = [
+            'position:fixed',
+            'z-index:99999',
+            'display:none',
+            'background:rgba(45,45,45,0.92)',
+            'border:1px solid rgba(255,255,255,0.15)',
+            'border-radius:5px',
+            'overflow:hidden',
+            'backdrop-filter:blur(6px)',
+            'box-shadow:0 4px 16px rgba(0,0,0,0.45)',
+        ].join(';');
+        document.body.appendChild(d);
+        _searchDropdown = d;
+        return d;
+    }
+
+    function hideSearchDropdown() {
+        getSearchDropdown().style.display = 'none';
+        _searchHighlightIdx = -1;
+    }
+
+    function setDropdownHighlight(idx) {
+        var items = getSearchDropdown().children;
+        for (var i = 0; i < items.length; i++) {
+            items[i].style.background = i === idx ? 'rgba(102,126,234,0.55)' : '';
+        }
+        _searchHighlightIdx = idx;
+    }
+
+    function closeSearch() {
+        if (_searchInput) _searchInput.style.display = 'none';
+        _searchInput && (_searchInput.value = '');
+        hideSearchDropdown();
+    }
+
+    function selectSearchNode(nodeId) {
+        var bridge = document.getElementById('presenter-select-bridge');
+        if (bridge) {
+            var setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+            setter.call(bridge, nodeId + '|||' + Date.now());
+            bridge.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        closeSearch();
+    }
+
+    function showSearchResults() {
+        var inputEl = _searchInput;
+        if (!inputEl) return;
+        var q = (inputEl.value || '').trim().toLowerCase();
+        if (!q) { hideSearchDropdown(); return; }
+
+        var nodes = window._graphNodes || [];
+        var matches = [];
+        for (var i = 0; i < nodes.length && matches.length < 3; i++) {
+            var n = nodes[i];
+            if ((n.id || '').toLowerCase().indexOf(q) >= 0 ||
+                    (n.label || '').toLowerCase().indexOf(q) >= 0) {
+                matches.push(n.id);
+            }
+        }
+
+        var d = getSearchDropdown();
+        d.innerHTML = '';
+        if (!matches.length) { d.style.display = 'none'; return; }
+
+        matches.forEach(function(nodeId, idx) {
+            var item = document.createElement('div');
+            item.textContent = nodeId;
+            item.style.cssText = [
+                'padding:8px 14px',
+                'color:rgba(255,255,255,0.9)',
+                "font-family:'Space Mono',monospace",
+                'font-size:12px',
+                'cursor:pointer',
+                'white-space:nowrap',
+                'overflow:hidden',
+                'text-overflow:ellipsis',
+            ].join(';');
+            item.addEventListener('mouseover', function() { setDropdownHighlight(idx); });
+            item.addEventListener('mousedown', function(e) {
+                e.preventDefault();
+                selectSearchNode(nodeId);
+            });
+            d.appendChild(item);
+        });
+
+        var rect = inputEl.getBoundingClientRect();
+        d.style.left = rect.left + 'px';
+        d.style.top = (rect.bottom + 4) + 'px';
+        d.style.minWidth = rect.width + 'px';
+        d.style.display = 'block';
+        _searchHighlightIdx = -1;
+    }
+
+    // Build the widget DOM and mount to body — zero React involvement
+    (function buildPresenterSearch() {
+        var container = document.createElement('div');
+        container.style.cssText = [
+            'position:fixed',
+            'top:8px',
+            'left:calc(50% - 40px)',
+            'transform:translateX(-50%)',
+            'z-index:9000',
+            'display:none',   // shown by MutationObserver when presenter mode activates
+            'align-items:center',
+            'gap:6px',
+        ].join(';');
+
+        var toggleBtn = document.createElement('div');
+        toggleBtn.title = 'Search domains';
+        toggleBtn.style.cssText = [
+            'cursor:pointer',
+            'padding:7px 9px',
+            'background:rgba(255,255,255,0.88)',
+            'border:1px solid #ddd',
+            'border-radius:5px',
+            'font-size:14px',
+            'color:#555',
+            'line-height:1',
+            'flex-shrink:0',
+            'user-select:none',
+        ].join(';');
+        toggleBtn.innerHTML = '<i class="fa-solid fa-magnifying-glass" style="pointer-events:none"></i>';
+
+        var inputEl = document.createElement('input');
+        inputEl.type = 'text';
+        inputEl.placeholder = 'search domains...';
+        inputEl.style.cssText = [
+            'display:none',
+            'width:240px',
+            'background:rgba(55,55,55,0.62)',
+            'border:1px solid rgba(255,255,255,0.22)',
+            'border-radius:5px',
+            'color:#fff',
+            'padding:6px 12px',
+            "font-family:'Space Mono',monospace",
+            'font-size:13px',
+            'outline:none',
+            'box-sizing:border-box',
+        ].join(';');
+        // Placeholder colour via a stylesheet rule (can't set via inline style)
+        var phStyle = document.createElement('style');
+        phStyle.textContent = '#_ps_input::placeholder{color:rgba(255,255,255,0.45);}';
+        document.head.appendChild(phStyle);
+        inputEl.id = '_ps_input';
+
+        container.appendChild(toggleBtn);
+        container.appendChild(inputEl);
+        document.body.appendChild(container);
+        _searchInput = inputEl;
+
+        // Show/hide the whole widget when presenter mode toggles
+        (function watchPresenterMode() {
+            var rootEl = document.getElementById('root-container');
+            if (!rootEl) { setTimeout(watchPresenterMode, 100); return; }
+            new MutationObserver(function() {
+                var isPresenter = rootEl.classList.contains('presenter-mode');
+                container.style.display = isPresenter ? 'flex' : 'none';
+                if (!isPresenter) closeSearch();
+            }).observe(rootEl, { attributes: true, attributeFilter: ['class'] });
+        })();
+
+        // Toggle the input open/closed
+        toggleBtn.addEventListener('click', function() {
+            if (inputEl.style.display === 'block') {
+                closeSearch();
+            } else {
+                inputEl.style.display = 'block';
+                inputEl.focus();
+            }
+        });
+
+        inputEl.addEventListener('input', showSearchResults);
+
+        inputEl.addEventListener('keydown', function(e) {
+            var items = getSearchDropdown().children;
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                setDropdownHighlight(Math.min(_searchHighlightIdx + 1, items.length - 1));
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                setDropdownHighlight(Math.max(_searchHighlightIdx - 1, 0));
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                var idx = _searchHighlightIdx >= 0 ? _searchHighlightIdx : 0;
+                var node = items[idx];
+                if (node) selectSearchNode(node.textContent);
+            } else if (e.key === 'Escape') {
+                closeSearch();
+            }
+        });
+
+        inputEl.addEventListener('blur', function() {
+            setTimeout(hideSearchDropdown, 150);
+        });
+
+        // Close on click outside the widget
+        document.addEventListener('mousedown', function(e) {
+            if (inputEl.style.display === 'block' && !container.contains(e.target)) {
+                closeSearch();
+            }
+        });
+    })();
 });

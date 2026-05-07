@@ -425,6 +425,30 @@ app.layout = html.Div([
                     height=None,
                     nodeColor=SEED_COLOR,
                     showNeighborLabels=False,
+                    labelFontSize=10,
+                    fitView=False,
+                ),
+                # Presenter mode toggle button
+                html.Div(
+                    html.I(id='presenter-icon',
+                           className='fa-solid fa-up-right-and-down-left-from-center'),
+                    id='presenter-btn',
+                    n_clicks=0,
+                    title='Presenter mode',
+                    style={
+                        'position': 'absolute',
+                        'top': '8px',
+                        'right': '8px',
+                        'z-index': '20',
+                        'cursor': 'pointer',
+                        'padding': '7px 9px',
+                        'background': 'rgba(255,255,255,0.88)',
+                        'border': '1px solid #ddd',
+                        'border-radius': '5px',
+                        'font-size': '14px',
+                        'color': '#555',
+                        'line-height': '1',
+                    }
                 ),
                 html.Div(id='graph-legend', children=[], style={
                     'position': 'absolute',
@@ -455,9 +479,15 @@ app.layout = html.Div([
     dcc.Store(id='legend-labels', data={}),
     dcc.Store(id='hidden-hops', data=[]),
     dcc.Store(id='hop-colors', data={}),
+    dcc.Store(id='presenter-mode', data=False),
     # Off-screen bridge: JS writes "hop|||#color|||timestamp" here to trigger color callback
     dcc.Input(id='color-pick-bridge', type='text', value='', debounce=False,
               style={'position': 'fixed', 'top': '-200px', 'opacity': '0', 'pointer-events': 'none'}),
+    # Off-screen bridge: JS writes "nodeId|||timestamp" here to trigger presenter-search selection
+    dcc.Input(id='presenter-select-bridge', type='text', value='', debounce=False,
+              style={'position': 'fixed', 'top': '-200px', 'opacity': '0', 'pointer-events': 'none'}),
+    # Hidden span used by clientside callback to push graph-nodes into window._graphNodes for JS use
+    html.Span(id='_graph_nodes_cache', style={'display': 'none'}),
     dcc.ConfirmDialog(id='confirm-dialog', message=''),
     dcc.ConfirmDialog(id='validation-report', message=''),
     dcc.ConfirmDialog(id='example-confirm', message=''),
@@ -518,6 +548,93 @@ def sync_graph_data(nodes, links, hidden_hops, hop_colors):
 
     # no_update preserves whatever selectedNodes the client currently has
     return visible_nodes, visible_links, mode, dash.no_update
+
+
+# Presenter mode: toggle store on button click
+@app.callback(
+    Output('presenter-mode', 'data'),
+    Input('presenter-btn', 'n_clicks'),
+    State('presenter-mode', 'data'),
+    prevent_initial_call=True
+)
+def toggle_presenter(n_clicks, current):
+    return not current
+
+
+# Presenter mode: initialize from ?presenter=true URL param
+@app.callback(
+    Output('presenter-mode', 'data', allow_duplicate=True),
+    Input('url', 'search'),
+    prevent_initial_call='initial_duplicate'
+)
+def init_presenter_from_url(search):
+    if search:
+        params = dict(
+            p.split('=', 1) for p in search.lstrip('?').split('&') if '=' in p
+        )
+        if params.get('presenter', '').lower() == 'true':
+            return True
+    raise PreventUpdate
+
+
+# Presenter mode: update icon + ForceGraph props whenever store changes
+@app.callback(
+    [Output('presenter-icon', 'className'),
+     Output('force-graph', 'labelFontSize'),
+     Output('force-graph', 'fitView')],
+    Input('presenter-mode', 'data'),
+)
+def update_presenter_ui(is_presenter):
+    if is_presenter:
+        icon = 'fa-solid fa-down-left-and-up-right-to-center'
+        return icon, 18, True
+    return 'fa-solid fa-up-right-and-down-left-from-center', 10, False
+
+
+# Presenter mode: apply/remove CSS class on root container; close search input on exit
+app.clientside_callback(
+    """
+    function(is_presenter) {
+        if (!is_presenter) {
+            var el = document.getElementById('presenter-search-input');
+            if (el) el.style.display = 'none';
+        }
+        return is_presenter ? 'presenter-mode' : '';
+    }
+    """,
+    Output('root-container', 'className'),
+    Input('presenter-mode', 'data'),
+)
+
+
+
+# Keep window._graphNodes in sync so the presenter search dropdown JS can access nodes
+app.clientside_callback(
+    """
+    function(nodes) {
+        window._graphNodes = nodes || [];
+        return '';
+    }
+    """,
+    Output('_graph_nodes_cache', 'children'),
+    Input('graph-nodes', 'data'),
+)
+
+
+# Presenter search: bridge write from JS dropdown selection → selectedNodes
+app.clientside_callback(
+    """
+    function(bridge_value) {
+        if (!bridge_value || bridge_value.indexOf('|||') < 0)
+            return window.dash_clientside.no_update;
+        var nodeId = bridge_value.split('|||')[0];
+        return [nodeId];
+    }
+    """,
+    Output('force-graph', 'selectedNodes', allow_duplicate=True),
+    Input('presenter-select-bridge', 'value'),
+    prevent_initial_call=True,
+)
 
 
 # Legend: rebuild whenever nodes, stored labels, or hidden-hops change
@@ -1148,7 +1265,7 @@ def load_example_graph(example_type):
 # Clientside callback to set graph dimensions
 app.clientside_callback(
     """
-    function(trigger) {
+    function(nodes_data, presenter_mode) {
         var container = document.getElementById('graph-container');
         if (container) {
             var rect = container.getBoundingClientRect();
@@ -1159,7 +1276,8 @@ app.clientside_callback(
     """,
     [Output('force-graph', 'width'),
      Output('force-graph', 'height')],
-    Input('graph-nodes', 'data'),
+    [Input('graph-nodes', 'data'),
+     Input('presenter-mode', 'data')],
 )
 
 

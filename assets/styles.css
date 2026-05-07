@@ -327,3 +327,25 @@ html, body {
     border-bottom-color: #667eea;
     background: rgba(102, 126, 234, 0.06);
 }
+
+/* ===== Presenter mode ===== */
+#root-container.presenter-mode #navbar,
+#root-container.presenter-mode #left-pane,
+#root-container.presenter-mode #control-panel {
+    display: none !important;
+}
+
+
+#root-container.presenter-mode #graph-wrapper {
+    height: 100%;
+}
+
+#root-container.presenter-mode #graph-legend {
+    font-size: 40px !important;
+    padding: 12px 18px !important;
+}
+
+#root-container.presenter-mode .legend-label-input {
+    font-size: 30px !important;
+    width: 300px !important;
+}
