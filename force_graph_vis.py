@@ -1150,6 +1150,10 @@ def discover_neighbors(n_clicks, selected_nodes, direction, min_conn, current_no
     current_nodes = current_nodes or []
     current_links = current_links or []
 
+    # Sync hop_counter to the actual graph state so discovered nodes don't
+    # collide with hops already assigned by loaded examples.
+    explorer.hop_counter = max({n.get('hop', 0) for n in current_nodes} | {0})
+
     new_nodes, new_links = explorer.discover_neighbors(selected_nodes, min_conn, direction)
 
     existing_ids = {n['id'] for n in current_nodes}
