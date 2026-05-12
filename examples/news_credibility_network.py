@@ -3,7 +3,8 @@ News Credibility Network Analysis
 
 Loads a credibility-labeled list of news domains and maps all links
 between them. Each node's type reflects its credibility label
-(reliable, unreliable, or mixed).
+(reliable, unreliable, or mixed). Also includes post-gazette.com as
+a separate node with its own legend entry, linked to all other domains.
 """
 
 import os
@@ -47,7 +48,8 @@ def build_network(
     Returns:
         NetworkX DiGraph with:
         - All input domains as nodes (is_seed=True, node_type=label)
-        - Edges representing links between the domains
+        - post-gazette.com as a separate node (node_type='post-gazette.com')
+        - Edges representing links between all domains
     """
     if file_path is None:
         file_path = get_example_data_path("news_credibility.csv")
@@ -67,9 +69,18 @@ def build_network(
 
     valid_domains, _ = validate_domains(wg, domains)
 
+    # Add post-gazette.com as a standalone node with its own legend entry
+    extra_domain = "post-gazette.com"
+    extra_valid, missing = wg.validate_seeds([extra_domain])
+    if missing:
+        print(f"Warning: {extra_domain} not found in webgraph, skipping")
+        extra_valid = []
+
+    all_domains = valid_domains + extra_valid
+
     edges = wg.get_links_between(
-        domains_from=valid_domains,
-        domains_to=valid_domains,
+        domains_from=all_domains,
+        domains_to=all_domains,
     )
     print(f"Found {len(edges)} links between domains")
 
@@ -78,6 +89,9 @@ def build_network(
 
     for domain in valid_domains:
         G.add_node(domain, is_seed=True, node_type=domain_to_label.get(domain, "unknown"))
+
+    for domain in extra_valid:
+        G.add_node(domain, is_seed=True, node_type=domain)
 
     G.add_edges_from(edges, edge_type="internal")
 
