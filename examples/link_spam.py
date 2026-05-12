@@ -133,11 +133,11 @@ def build_network(
 
     # Add casino seed nodes (only those linked by shared backlinkers)
     for domain in linked_casinos:
-        G.add_node(domain, is_seed=True, node_type="casino")
+        G.add_node(domain, is_seed=True, node_type="online scam casino")
 
     # Add misinformation seed nodes (only those linked by shared backlinkers)
     for domain in linked_misinfo:
-        G.add_node(domain, is_seed=True, node_type="misinfo")
+        G.add_node(domain, is_seed=True, node_type="misinformation source")
 
     # Add shared backlinker nodes
     for backlinker in shared_backlinkers:
@@ -146,7 +146,7 @@ def build_network(
         G.add_node(
             backlinker,
             is_seed=False,
-            node_type="link_spam",
+            node_type="link spam",
             casino_connections=casino_count,
             misinfo_connections=misinfo_count,
             total_connections=casino_count + misinfo_count,
@@ -179,7 +179,7 @@ if __name__ == "__main__":
 
     # Additional stats for this specific analysis
     link_spam_nodes = [
-        (n, d) for n, d in G.nodes(data=True) if d.get("node_type") == "link_spam"
+        (n, d) for n, d in G.nodes(data=True) if d.get("node_type") == "link spam"
     ]
     if link_spam_nodes:
         print("\nTop 10 link spam sites by total connections:")
