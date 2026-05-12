@@ -155,12 +155,12 @@ def build_network(
     # Add edges from backlinkers to casinos
     for backlinker, casinos in casino_edges.items():
         for casino in casinos:
-            G.add_edge(backlinker, casino, edge_type="external", target_type="casino")
+            G.add_edge(backlinker, casino, edge_type="external", target_type="online scam casino")
 
     # Add edges from backlinkers to misinformation sites
     for backlinker, misinfos in misinfo_edges.items():
         for misinfo in misinfos:
-            G.add_edge(backlinker, misinfo, edge_type="external", target_type="misinfo")
+            G.add_edge(backlinker, misinfo, edge_type="external", target_type="misinformation source")
 
     print(f"\nFinal graph: {G.number_of_nodes()} nodes, {G.number_of_edges()} edges")
     print(f"  - {len(linked_casinos)} casino domains")

@@ -153,6 +153,7 @@ EXAMPLE_MAP = {
     '/pravda-network': 'pravda',
     '/think-tanks': 'think-tanks',
     '/news-credibility-network': 'news-credibility',
+    '/dotnews-network': 'dotnews',
 }
 EXAMPLE_NAMES = {
     'link-spam': 'Link Spam Network',
@@ -161,6 +162,7 @@ EXAMPLE_NAMES = {
     'pravda': 'Pravda Network',
     'think-tanks': 'Think Tanks',
     'news-credibility': 'News Credibility Network',
+    'dotnews': 'Dotnews Network',
 }
 
 # Node type labels to hide by default when an example is first loaded.
@@ -170,6 +172,19 @@ EXAMPLE_DEFAULT_HIDDEN_LABELS = {
     'news-credibility':  {'unknown', 'mixed'},
     'iranian': {'reformist', 'neutral'},
     'think-tanks': {'backlink'},
+    'dotnews': {'mixed', 'backlink .news', 'outlink .news'},
+}
+
+
+# Map example type to pickle file
+pickle_files = {
+    'iranian': 'iranian_news_network.pkl',
+    'news-polarization': 'high_profile_news_network.pkl',
+    'link-spam': 'link_spam.pkl',
+    'pravda': 'pravda_network.pkl',
+    'think-tanks': 'think_tanks.pkl',
+    'news-credibility': 'news_credibility_network.pkl',
+    'dotnews': 'dotnews_network.pkl',
 }
 
 # ----- Layout -----
@@ -184,6 +199,11 @@ app.layout = html.Div([
                 html.Div([
                     html.Div([
                         dcc.Link('News Credibility Network', href='/news-credibility-network', className='example-name'),
+                        html.A('paper', href='https://ojs.aaai.org/index.php/ICWSM/article/view/31309',
+                               target='_blank', className='example-paper-link')
+                    ], className='nav-dropdown-item example-item'),
+                    html.Div([
+                        dcc.Link('Dotnews Network', href='/dotnews-network', className='example-name'),
                         html.A('paper', href='https://ojs.aaai.org/index.php/ICWSM/article/view/31309',
                                target='_blank', className='example-paper-link')
                     ], className='nav-dropdown-item example-item'),
@@ -1338,16 +1358,6 @@ def load_example_graph(example_type):
     if not example_type:
         raise PreventUpdate
 
-    # Map example type to pickle file
-    pickle_files = {
-        'iranian': 'iranian_news_network.pkl',
-        'news-polarization': 'high_profile_news_network.pkl',
-        'link-spam': 'link_spam.pkl',
-        'pravda': 'pravda_network.pkl',
-        'think-tanks': 'think_tanks.pkl',
-        'news-credibility': 'news_credibility_network.pkl',
-    }
-
     pickle_file = pickle_files.get(example_type)
     if not pickle_file:
         raise PreventUpdate
@@ -1452,6 +1462,7 @@ server = app.server
 @server.route('/iranian-news-network')
 @server.route('/think-tanks-network')
 @server.route('/high-profile-news-network')
+@server.route('/dotnews-network')
 def serve_example_routes():
     return app.index()
 
