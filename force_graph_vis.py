@@ -169,10 +169,10 @@ EXAMPLE_NAMES = {
 # Matched case-insensitively against the node_type attribute.
 EXAMPLE_DEFAULT_HIDDEN_LABELS = {
     'news-polarization': {'left', 'right', 'center'},
-    'news-credibility':  {'unknown', 'mixed', 'post-gazette.com'},
+    'news-credibility':  {'unknown', 'mixed'},
     'iranian': {'reformist', 'neutral'},
     'think-tanks': {'backlink'},
-    'dotnews': {'mixed', 'backlink .news', 'outlink .news'},
+    'dotnews': {'mixed'},
 }
 
 

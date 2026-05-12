@@ -133,11 +133,11 @@ def build_network(
 
     # Add casino seed nodes (only those linked by shared backlinkers)
     for domain in linked_casinos:
-        G.add_node(domain, is_seed=True, node_type="online scam casino")
+        G.add_node(domain, is_seed=True, node_type="scam casino site")
 
     # Add misinformation seed nodes (only those linked by shared backlinkers)
     for domain in linked_misinfo:
-        G.add_node(domain, is_seed=True, node_type="misinformation source")
+        G.add_node(domain, is_seed=True, node_type="misinformation news source")
 
     # Add shared backlinker nodes
     for backlinker in shared_backlinkers:
@@ -155,12 +155,12 @@ def build_network(
     # Add edges from backlinkers to casinos
     for backlinker, casinos in casino_edges.items():
         for casino in casinos:
-            G.add_edge(backlinker, casino, edge_type="external", target_type="online scam casino")
+            G.add_edge(backlinker, casino, edge_type="external", target_type="scam casino site")
 
     # Add edges from backlinkers to misinformation sites
     for backlinker, misinfos in misinfo_edges.items():
         for misinfo in misinfos:
-            G.add_edge(backlinker, misinfo, edge_type="external", target_type="misinformation source")
+            G.add_edge(backlinker, misinfo, edge_type="external", target_type="misinformation news source")
 
     print(f"\nFinal graph: {G.number_of_nodes()} nodes, {G.number_of_edges()} edges")
     print(f"  - {len(linked_casinos)} casino domains")
